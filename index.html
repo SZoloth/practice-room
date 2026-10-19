@@ -88,6 +88,22 @@ textarea{min-height:70px;resize:vertical}
 .kb .bt{fill:var(--bg);font:600 11px var(--f-mono)} .kb .nm{fill:var(--ink);font:600 12px var(--f-mono)}
 .video{position:relative;width:100%;aspect-ratio:16/9;max-width:100%;border-radius:8px;overflow:hidden;background:var(--line)}
 .video iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.session-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.focus-line{color:var(--accent);margin-top:-8px}
+.rail{list-style:none;margin:0;padding:0;display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
+.railbtn{font:inherit;display:flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:999px;padding:4px 10px 4px 4px;cursor:pointer;white-space:nowrap}
+.railbtn .num{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--line);color:var(--ink);font:600 12px var(--f-mono)}
+.railbtn.done .num{background:var(--good-soft);color:var(--good)}
+.railbtn.cur{border-color:var(--accent);color:var(--ink)}
+.railbtn.cur .num{background:var(--accent);color:var(--bg)}
+.railbtn .lbl{font-size:13px;max-width:12em;overflow:hidden;text-overflow:ellipsis}
+.step{gap:12px;padding:18px}
+.step h2{font-size:24px}
+.step-body{display:flex;flex-direction:column;gap:10px}
+.step-body .block{border:0;padding:0;background:none}
+.step-nav{justify-content:space-between;border-top:1px solid var(--line);padding-top:12px}
+.step-nav .next{margin-left:auto;padding:10px 16px}
+.clock.over{color:var(--warn)}
 .review-out{white-space:pre-wrap;font-size:14.5px}
 @media (prefers-reduced-motion:no-preference){.answers button{transition:background .12s}}
 </style>
@@ -221,81 +237,6 @@ const $ = (sel,root=document)=>root.querySelector(sel);
 const el = (tag,attrs={},...kids)=>{const e=document.createElement(tag);for(const[k,v]of Object.entries(attrs)){if(k==="class")e.className=v;else if(k.startsWith("on"))e.addEventListener(k.slice(2),v);else if(v!==false&&v!=null)e.setAttribute(k,v===true?"":v)}for(const k of kids.flat()){if(k==null||k===false)continue;e.append(k.nodeType?k:document.createTextNode(k))}return e};
 const pill=(st)=>el("span",{class:"pill "+st},{locked:"Locked",learning:"Learning",mastered:"Mastered",due:"Review due",weak:"Flagged"}[st]);
 
-function renderToday(){
-  const root=$("#tab-today"); root.replaceChildren();
-  const p=plan();
-  const focusText = p.weakIds.length
-    ? `Flagged from your last misses: ${p.weakIds.map(id=>SK[id].name).join(", ")}. Today's warm-up and drill go there first.`
-    : `Nothing flagged. Today follows the normal rotation.`;
-  root.append(el("div",{class:"focus"},el("div",{class:"eyebrow"},"Next focus"),el("p",{},focusText)));
-
-  const phase0Done = ["keys","fingers","posture"].every(id=>sk(id).status==="mastered");
-  if(!phase0Done){
-    root.append(block("Start here",null,
-      el("p",{},"You're in the first week. Nothing below assumes you know anything about music yet."),
-      el("p",{},"1. Watch the video lesson further down first. Lesson 1 shows where the notes are and how fingers are numbered."),
-      el("p",{},"2. Do the warm-up and drill below. Both drills (key names and finger numbers) take about a week to master at a few minutes a day."),
-      el("p",{},"3. Pieces start once you can name the keys. Until then, the piece time goes to the video lesson.")));
-  }
-
-  // 1 warm-up
-  root.append(block("Warm-up",3,...warmup(p,phase0Done)));
-
-  // 2 fundamentals
-  root.append(block("Fundamentals drill",5,
-    el("p",{},`${SK[p.drill].name}: two 60-second runs. `, status(p.drill)==="due"?pill("due"):null),
-    el("p",{class:"small muted"},SK[p.drill].gate),
-    el("div",{class:"row"},el("button",{class:"btn primary",onclick:()=>{switchTab("drill");startDrill(SK[p.drill].drill)}},"Start drill"))));
-
-  // 3 sight-reading
-  root.append(block("Sight-reading",5,
-    el("p",{},"New material, played once, at a tempo where you don't stop."),
-    el("p",{class:"small"},el("a",{href:"https://sightreadingtraining.com",target:"_blank",rel:"noopener"},"sightreadingtraining.com"))));
-
-  // 4 spaced review
-  const rv = el("div",{class:"block"},blockHead("Spaced review",4));
-  const items=[...p.duePieces.map(pc=>({type:"piece",pc})),...p.dueSelf.map(s=>({type:"skill",s}))];
-  if(!items.length) rv.append(el("p",{class:"muted"},"Nothing due. Give these minutes to the new piece."));
-  for(const it of items){
-    if(it.type==="piece") rv.append(resultRow(`${it.pc.name} (cold run)`, ok=>pieceResult(it.pc.id,ok,true)));
-    else rv.append(resultRow(`${it.s.name}: ${it.s.gate}`, ok=>selfResult(it.s.id,ok)));
-  }
-  root.append(rv);
-
-  // 5 new piece + gate checks
-  const np = el("div",{class:"block"},blockHead("New piece",8));
-  if(sk("treble").status!=="mastered" && sk("keys").status!=="mastered"){
-    np.append(el("p",{class:"muted"},"Not yet. Pieces start after you can name the keys. The video lesson below gets these minutes."));
-  } else if(p.newPiece){
-    const n = p.newPiece.cleanDays.length;
-    np.append(el("p",{},p.newPiece.name),
-      el("p",{class:"small muted"},`Hardest 2–4 bars first, slowed until correct, then reconnect. End with one cold run. Clean cold runs: ${n} of 3 days.`),
-      resultRow("Cold run today", ok=>pieceResult(p.newPiece.id,ok,false)));
-  } else {
-    np.append(el("p",{class:"muted"},"No piece in progress."),el("div",{class:"row"},el("button",{class:"btn",onclick:()=>switchTab("pieces")},"Add a piece")));
-  }
-  root.append(np);
-  root.append(lessonBlock(sk("keys").status==="mastered"?null:8));
-
-  if(p.gates.length){
-    const g = el("div",{class:"block"},blockHead("Pass test",null),el("p",{class:"small muted"},"Try one of these cold, once. Three passing days unlocks what's next."));
-    for(const s of p.gates){ const n=sk(s.id).passDays.length; g.append(resultRow(`${s.name} (${n}/3): ${s.gate}`, ok=>selfResult(s.id,ok))); }
-    root.append(g);
-  }
-
-  // finish
-  const notes = el("textarea",{id:"sessNotes",placeholder:"What went wrong today? One line is enough."});
-  root.append(el("div",{class:"block"},blockHead("Finish",null),notes,
-    el("div",{class:"row"},el("button",{class:"btn primary",onclick:async(e)=>{
-      e.target.disabled=true;
-      S.lastKey = p.key;
-      const row={date:TODAY, at:new Date().toISOString(), notes:notes.value.trim(), warmupKey:p.key, ...todayLog};
-      sessions.unshift(row);
-      await addRow("sessions",row); await save();
-      todayLog={drillRuns:[],pieceResults:[],gateResults:[]};
-      e.target.textContent="Logged"; renderLog();
-    }},"Log today's session"))));
-}
 // ---------- keyboard + warm-up ----------
 const PC={C:0,D:2,E:4,F:5,G:7,A:9,B:11};
 function noteNames(key,semis){ // spell notes of a major key by letter
@@ -541,10 +482,10 @@ function renderDrillHome(){
       el("div",{class:"row"},el("button",{class:"btn"+(st==="locked"?"":" primary"),disabled:st==="locked",onclick:()=>startDrill(s.drill)},st==="locked"?"Locked":"Start 60-second run"))));
   }
 }
-function startDrill(kind){
-  const root=$("#tab-drill"); root.replaceChildren();
+function startDrill(kind,root=$("#tab-drill"),inline=false){
+  abortDrill(); root.replaceChildren();
   const skillId={keys:"keys",fingers:"fingers",treble:"treble",bass:"bass",ledger:"ledger",keysig:"keysig",triads:"triads"}[kind];
-  drillState={kind,skillId,correct:0,total:0,end:0,timer:null,current:null};
+  drillState={kind,skillId,inline,correct:0,total:0,end:0,timer:null,current:null};
   const timer=el("div",{class:"timer"},"60");
   const score=el("div",{class:"small muted mono"},"0 correct · 0 tried");
   const stage=el("div",{class:"drill-stage"});
@@ -554,7 +495,7 @@ function startDrill(kind){
   const startBtn=el("button",{class:"btn primary",onclick:()=>{startBtn.hidden=true;go()}},"Start");
   root.append(el("div",{class:"block"},
     el("div",{class:"block-head"},el("h3",{},SK[skillId].name),timer),score,stage,
-    el("div",{class:"row"},startBtn,el("button",{class:"btn",onclick:()=>{stop(false);renderDrillHome()}},"Back"))));
+    el("div",{class:"row"},startBtn,inline?null:el("button",{class:"btn",onclick:()=>{stop(false);renderDrillHome()}},"Back"))));
   prompt.innerHTML=`<p class="muted">Ready when you are.</p>`;
 
   function next(){
@@ -598,21 +539,110 @@ function startDrill(kind){
     if(s.status==="mastered"){ if(npm>=target*.85&&acc>=90){reviewPass(skillId);verdict="Review passed. Next review pushed out.";} else {reviewFail(skillId);flagWeak(skillId);verdict="Review missed. Back to learning, and flagged for tomorrow.";} }
     else if(pass){ if(!s.passDays.includes(TODAY))s.passDays.push(TODAY); clearWeak(skillId); if(s.passDays.length>=2){promote(skillId);verdict="Mastered. It'll come back for review tomorrow, then less and less often.";} else verdict=`Passed. Pass again on another day to master it.`; }
     else verdict = acc<95 ? `Accuracy ${acc}% is under 95%. Slow down: accuracy first, then speed.` : `Accurate but ${npm}/min is under ${target}. Push the pace a little.`;
-    save(); renderSkills(); renderToday();
+    save(); renderSkills(); if(!inline) renderToday();
     prompt.innerHTML=""; answers.replaceChildren();
     prompt.append(el("div",{class:"panel",style:"align-items:center;text-align:center"},
       el("div",{class:"stats",style:"justify-content:center"},el("div",{class:"stat"},el("span",{class:"eyebrow"},"Speed"),el("b",{},npm+"/min")),el("div",{class:"stat"},el("span",{class:"eyebrow"},"Accuracy"),el("b",{},acc+"%"))),
-      el("p",{},verdict),el("div",{class:"row",style:"justify-content:center"},el("button",{class:"btn primary",onclick:()=>startDrill(kind)},"Run again"))));
+      el("p",{},verdict),el("div",{class:"row",style:"justify-content:center"},el("button",{class:"btn primary",onclick:()=>startDrill(kind,root,inline)},"Run again"))));
   }
 }
 const pick=a=>a[Math.floor(Math.random()*a.length)];
 const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
 
+// ---------- today: guided session ----------
+let runKey="pr-run-"+TODAY, run=load(runKey,{i:0,done:[],logged:false}), stepTick=null;
+function saveRun(){store(runKey,run)}
+function buildSteps(p,phase0Done){
+  const steps=[];
+  const lesson={id:"lesson",title:`Video lesson ${S.lesson||1}`,mins:8,render:c=>lessonBody(c)};
+  if(!phase0Done) steps.push(lesson);
+  steps.push({id:"warmup",title:"Warm-up",mins:3,render:c=>c.append(...warmup(p,phase0Done))});
+  steps.push({id:"drill",title:SK[p.drill].name,mins:5,render:c=>{
+    c.append(el("p",{class:"small muted"},SK[p.drill].gate));
+    const box=el("div"); c.append(box); startDrill(SK[p.drill].drill,box,true);
+  }});
+  if(phase0Done){
+    steps.push({id:"sight",title:"Sight-reading",mins:5,render:c=>c.append(
+      el("p",{},"Play brand-new music once, at a speed slow enough that you never stop. Mistakes are fine; stopping isn't."),
+      el("p",{},el("a",{href:"https://sightreadingtraining.com",target:"_blank",rel:"noopener"},"Open sightreadingtraining.com")))});
+    const items=[...p.duePieces.map(pc=>({type:"piece",pc})),...p.dueSelf.map(s=>({type:"skill",s}))];
+    if(items.length) steps.push({id:"review",title:"Spaced review",mins:4,render:c=>{
+      c.append(el("p",{},"Play each of these once, cold, with no warm-up on it. That first try is the honest test."));
+      for(const it of items) c.append(it.type==="piece"?resultRow(it.pc.name,ok=>pieceResult(it.pc.id,ok,true)):resultRow(`${it.s.name}: ${it.s.gate}`,ok=>selfResult(it.s.id,ok)));
+    }});
+    if(p.newPiece) steps.push({id:"piece",title:p.newPiece.name,mins:8,render:c=>{
+      c.append(el("p",{},"Find the 2–4 hardest bars. Play just those, slowly enough to get them right, until they're easy. Then play the whole piece once."),
+        el("p",{class:"small muted"},`Clean first tries so far: ${p.newPiece.cleanDays.length} of 3 days.`),
+        resultRow("How did your first full play-through go?",ok=>pieceResult(p.newPiece.id,ok,false)));
+    }});
+    steps.push(lesson);
+  }
+  if(p.gates.length) steps.push({id:"gates",title:"Pass test",mins:2,render:c=>{
+    c.append(el("p",{},"Try each once, cold. Three passing days on different days unlocks what comes next."));
+    for(const s of p.gates) c.append(resultRow(`${s.name} (${sk(s.id).passDays.length}/3): ${s.gate}`,ok=>selfResult(s.id,ok)));
+  }});
+  steps.push({id:"wrap",title:"Wrap up",mins:1,render:c=>{
+    if(run.logged){c.append(el("p",{},"Session logged. Same time tomorrow."));return}
+    const notes=el("textarea",{id:"sessNotes",placeholder:"What was hardest today? One line is enough."});
+    c.append(notes,el("div",{class:"row"},el("button",{class:"btn primary",onclick:async()=>{
+      S.lastKey=p.key;
+      const row={date:TODAY,at:new Date().toISOString(),notes:notes.value.trim(),warmupKey:p.key,stepsDone:run.done.length,...todayLog};
+      sessions.unshift(row); await addRow("sessions",row); await save();
+      todayLog={drillRuns:[],pieceResults:[],gateResults:[]};
+      run.logged=true; if(!run.done.includes("wrap"))run.done.push("wrap"); saveRun(); renderLog(); renderToday();
+    }},"Log today's session")));
+  }});
+  return steps;
+}
+function lessonBody(c){
+  const n=S.lesson||1;
+  const frame=el("div",{class:"video"});
+  frame.innerHTML=`<iframe src="https://www.youtube-nocookie.com/embed/videoseries?list=${PLAYLIST}&index=${n}" title="Bill Hilton beginner lesson ${n}" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>`;
+  c.append(el("p",{},"Watch with the piano in front of you. Pause and copy everything he plays."),frame,
+    el("div",{class:"row"},
+      el("button",{class:"btn",onclick:()=>{S.lesson=n+1;save();renderToday()}},`I can play lesson ${n}'s examples`),
+      el("span",{class:"small muted"},`Tap when you can. Then lesson ${n+1} is up next.`)));
+}
+function abortDrill(){ if(!drillState)return; clearInterval(drillState.timer); document.removeEventListener("keydown",drillState.keyHandler); drillState=null; }
+function renderToday(){
+  abortDrill();
+  const root=$("#tab-today"); root.replaceChildren(); clearInterval(stepTick);
+  const p=plan();
+  const phase0Done=["keys","fingers","posture"].every(id=>sk(id).status==="mastered");
+  const steps=buildSteps(p,phase0Done);
+  run.i=Math.min(run.i,steps.length-1);
+  const total=steps.reduce((a,s)=>a+s.mins,0);
+  root.append(el("div",{class:"session-head"},
+    el("h2",{},run.logged?"Done for today":`Today's session`),
+    el("span",{class:"mins"},`${steps.length} steps · about ${total} min`)));
+  if(p.weakIds.length) root.append(el("p",{class:"small focus-line"},`Extra attention today: ${p.weakIds.map(id=>SK[id].name).join(", ")}.`));
+  const rail=el("ol",{class:"rail"});
+  steps.forEach((s,i)=>rail.append(el("li",{},el("button",{class:"railbtn"+(i===run.i?" cur":"")+(run.done.includes(s.id)?" done":""),"aria-current":i===run.i?"step":false,onclick:()=>{abortDrill();run.i=i;saveRun();renderToday()}},
+    el("span",{class:"num"},run.done.includes(s.id)?"✓":String(i+1)),el("span",{class:"lbl"},s.title)))));
+  root.append(rail);
+  const s=steps[run.i];
+  const clock=el("span",{class:"mins clock"});
+  const body=el("div",{class:"step-body"});
+  const card=el("div",{class:"block step"},
+    el("div",{class:"block-head"},el("div",{},el("div",{class:"eyebrow"},`Step ${run.i+1} of ${steps.length}`),el("h2",{},s.title)),clock),body);
+  s.render(body);
+  const isLast=run.i===steps.length-1;
+  card.append(el("div",{class:"row step-nav"},
+    run.i>0?el("button",{class:"btn",onclick:()=>{abortDrill();run.i--;saveRun();renderToday()}},"Back"):null,
+    isLast?null:el("button",{class:"btn primary next",onclick:()=>{abortDrill();if(!run.done.includes(s.id))run.done.push(s.id);run.i++;saveRun();renderToday();window.scrollTo({top:0})}},`Done, next: ${steps[run.i+1].title}`)));
+  root.append(card);
+  const t0=Date.now(), target=s.mins*60;
+  const fmt=x=>`${Math.floor(x/60)}:${String(x%60).padStart(2,"0")}`;
+  const tick=()=>{const e=Math.floor((Date.now()-t0)/1000);clock.textContent=`${fmt(e)} / ${fmt(target)}`;clock.classList.toggle("over",e>target)};
+  tick(); stepTick=setInterval(tick,1000);
+}
+
 // ---------- tabs ----------
 function switchTab(name){
   document.querySelectorAll("nav button").forEach(b=>b.setAttribute("aria-selected",b.dataset.tab===name));
   document.querySelectorAll("section.panel").forEach(s=>s.hidden=s.id!=="tab-"+name);
-  if(name==="drill"&&!drillState) renderDrillHome();
+  if(name==="drill"){ if(drillState?.inline) abortDrill(); if(!drillState) renderDrillHome(); }
+  if(name==="today") renderToday();
   try{localStorage.setItem("pr-tab",name)}catch{}
 }
 document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>switchTab(b.dataset.tab)));
