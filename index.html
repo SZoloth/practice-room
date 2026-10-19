@@ -1,0 +1,628 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Practice Room</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one 760px column; a sticky tab bar over stacked "blocks" that mirror the 25-minute session */
+:root{
+  --bg:#f6f6f3; --surface:#ffffff; --ink:#18181b; --muted:#5f6068; --line:#dcdcd6;
+  --accent:#3b4bb8; --accent-soft:#e6e8f7; --good:#1f7a4d; --good-soft:#e1f2e8; --warn:#9a5b00; --warn-soft:#fbefd9; --bad:#b3261e; --bad-soft:#f9e1df;
+  --f-display:"Newsreader",Georgia,serif; --f-body:"Public Sans",system-ui,sans-serif; --f-mono:"JetBrains Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#121215; --surface:#1b1b20; --ink:#ececef; --muted:#a0a1aa; --line:#2e2e35;
+  --accent:#9aa6ff; --accent-soft:#262a4a; --good:#6fd39f; --good-soft:#173326; --warn:#f0b65a; --warn-soft:#3a2a10; --bad:#ff8a80; --bad-soft:#3d1c1a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121215; --surface:#1b1b20; --ink:#ececef; --muted:#a0a1aa; --line:#2e2e35;
+  --accent:#9aa6ff; --accent-soft:#262a4a; --good:#6fd39f; --good-soft:#173326; --warn:#f0b65a; --warn-soft:#3a2a10; --bad:#ff8a80; --bad-soft:#3d1c1a; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5}
+.wrap{max-width:760px;margin:0 auto;padding-inline:16px;padding-block:20px 60px;display:flex;flex-direction:column;gap:18px}
+h1,h2,h3{font-family:var(--f-display);font-weight:600;text-wrap:balance;margin:0;line-height:1.2}
+h1{font-size:30px} h2{font-size:21px} h3{font-size:17px}
+p{margin:0}
+.muted{color:var(--muted)} .small{font-size:13px}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.eyebrow{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:end;gap:8px}
+nav{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);display:flex;gap:4px;overflow-x:auto;border-bottom:1px solid var(--line);padding-block:6px}
+nav button{background:none;border:0;color:var(--muted);font:inherit;font-weight:500;padding:8px 12px;border-radius:8px;cursor:pointer;white-space:nowrap}
+nav button[aria-selected="true"]{color:var(--ink);background:var(--surface);box-shadow:inset 0 -2px 0 var(--accent)}
+.panel{display:flex;flex-direction:column;gap:14px}
+.block{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.block-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.mins{font-family:var(--f-mono);font-size:13px;color:var(--muted)}
+.focus{background:var(--accent-soft);border-radius:10px;padding:12px 16px;display:flex;flex-direction:column;gap:4px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button.btn{font:inherit;font-weight:500;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:7px 12px;border-radius:8px;cursor:pointer}
+button.btn:hover{border-color:var(--accent)}
+button.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--bg)}
+button.btn.good{border-color:var(--good);color:var(--good)}
+button.btn.bad{border-color:var(--bad);color:var(--bad)}
+button.btn:disabled{opacity:.45;cursor:default}
+button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+a{color:var(--accent)}
+.pill{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.pill.locked{background:var(--line);color:var(--muted)}
+.pill.learning{background:var(--warn-soft);color:var(--warn)}
+.pill.mastered{background:var(--good-soft);color:var(--good)}
+.pill.due{background:var(--accent-soft);color:var(--accent)}
+.pill.weak{background:var(--bad-soft);color:var(--bad)}
+.skills{display:flex;flex-direction:column;gap:18px}
+.phase{display:flex;flex-direction:column;gap:6px}
+.skill{display:grid;grid-template-columns:1fr auto;gap:2px 12px;padding:10px 0;border-top:1px solid var(--line)}
+.skill .gate{grid-column:1/-1;font-size:13px;color:var(--muted)}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:999px;padding:4px 10px;cursor:pointer}
+.chip[aria-pressed="true"]{border-color:var(--bad);color:var(--bad);background:var(--bad-soft)}
+.drill-stage{display:flex;flex-direction:column;align-items:center;gap:12px;padding-block:8px}
+.staff{width:100%;max-width:340px;height:auto}
+.staff line,.staff path.stroke{stroke:var(--ink)}
+.staff text,.staff .fill{fill:var(--ink)}
+.answers{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;width:100%;max-width:420px}
+.answers.wide{grid-template-columns:repeat(auto-fill,minmax(68px,1fr))}
+.answers button{font:600 16px var(--f-mono);padding:12px 0;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+.answers button.hit{background:var(--good-soft);border-color:var(--good)}
+.answers button.miss{background:var(--bad-soft);border-color:var(--bad)}
+.timer{font:600 28px var(--f-mono)}
+.stats{display:flex;gap:18px;flex-wrap:wrap}
+.stat{display:flex;flex-direction:column}
+.stat b{font:600 20px var(--f-mono)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;color:var(--muted);font-weight:600}
+.tablewrap{overflow-x:auto}
+input[type=text],textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%}
+textarea{min-height:70px;resize:vertical}
+.banner{font-size:13px;padding:8px 12px;border-radius:8px;background:var(--warn-soft);color:var(--warn)}
+.kbwrap{overflow-x:auto} .kb{width:100%;max-width:440px;height:auto;display:block}
+.kb .w{fill:var(--surface);stroke:var(--ink);stroke-width:1}
+.kb .w.on{fill:var(--accent-soft)}
+.kb .b{fill:var(--ink)} .kb .b.on{fill:var(--accent)}
+.kb .dot{fill:var(--accent)} .kb .dt{fill:var(--bg);font:600 12px var(--f-mono)}
+.kb .bt{fill:var(--bg);font:600 11px var(--f-mono)} .kb .nm{fill:var(--ink);font:600 12px var(--f-mono)}
+.video{position:relative;width:100%;aspect-ratio:16/9;max-width:100%;border-radius:8px;overflow:hidden;background:var(--line)}
+.video iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.review-out{white-space:pre-wrap;font-size:14.5px}
+@media (prefers-reduced-motion:no-preference){.answers button{transition:background .12s}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow">Yamaha P-95 · 25 min a day</div>
+      <h1>Practice Room</h1>
+    </div>
+    <div class="small muted mono" id="today"></div>
+  </header>
+  <div class="banner" id="saveBanner" hidden>This browser is blocking storage, so progress won't be kept. Turn off private browsing for this site.</div>
+  <nav role="tablist">
+    <button role="tab" data-tab="today" aria-selected="true">Today</button>
+    <button role="tab" data-tab="drill" aria-selected="false">Drills</button>
+    <button role="tab" data-tab="skills" aria-selected="false">Skill map</button>
+    <button role="tab" data-tab="pieces" aria-selected="false">Pieces</button>
+    <button role="tab" data-tab="log" aria-selected="false">Log</button>
+  </nav>
+
+  <section class="panel" id="tab-today"></section>
+  <section class="panel" id="tab-drill" hidden></section>
+  <section class="panel" id="tab-skills" hidden></section>
+  <section class="panel" id="tab-pieces" hidden></section>
+  <section class="panel" id="tab-log" hidden></section>
+</div>
+
+<script>
+// ---------- skill graph ----------
+const SKILLS = [
+  // phase 0
+  {id:"keys", phase:0, name:"Name the white keys", kind:"drill", drill:"keys", pre:[], target:30, gate:"The white keys repeat the letters C D E F G A B. Find them by the black keys: C is the white key just left of any group of two black keys. Target: name 30 highlighted keys a minute at 95%+, on two different days."},
+  {id:"fingers", phase:0, name:"Finger numbers", kind:"drill", drill:"fingers", pre:[], target:30, gate:"Piano music numbers your fingers: thumb = 1, index = 2, middle = 3, ring = 4, pinky = 5, the same on both hands. Target: 30 a minute at 95%+, on two different days."},
+  {id:"posture", phase:0, name:"Sitting and hand shape", kind:"self", pre:[], gate:"Sit so your forearms are level with the keys and your elbows hang slightly in front of your body. Curve your fingers as if holding a tennis ball and press keys with the fingertip pads. Film 30 seconds of yourself and check: wrists level (not sagging below the keys), shoulders down, no knuckle caving in."},
+  // phase 1
+  {id:"pulse", phase:1, name:"Steady beat", kind:"self", pre:[], gate:"A metronome clicks at an even speed (free: search “online metronome”). Play any one key once per click at 60, then 80, then 100 clicks per minute for 30 seconds each, without rushing ahead or falling behind."},
+  {id:"five", phase:1, name:"Five-finger patterns", kind:"self", pre:["posture","fingers","keys"], gate:"Play the five-key pattern shown in Today's warm-up with each hand: up and back down, one key per click at 80, every note equally loud."},
+  {id:"treble", phase:1, name:"Reading notes: treble clef", kind:"drill", drill:"treble", pre:["keys"], target:40, gate:"Sheet music shows notes on five lines. The treble clef (𝄞) staff is usually for the right hand. Learn it from musictheory.net's free “The Staff, Clefs, and Ledger Lines” and “Note Identification” lessons, then drill here. Target: 40 a minute at 95%+, on two different days."},
+  {id:"bass", phase:1, name:"Reading notes: bass clef", kind:"drill", drill:"bass", pre:["treble"], target:40, gate:"The bass clef (𝄢) staff is usually for the left hand. Same lines, different letters. Target: 40 a minute at 95%+, on two different days."},
+  {id:"keysig", phase:1, name:"Key signatures", kind:"drill", drill:"keysig", pre:["treble"], target:15, gate:"The ♯ and ♭ symbols at the start of a line tell you which black keys the piece uses. Learn them from musictheory.net's “Key Signatures” lesson. Target: 15 a minute at 95%+, on two different days."},
+  {id:"scalesCGF", phase:1, name:"C, G and F major scales", kind:"self", pre:["five","pulse"], gate:"A scale is eight keys in a row up to the next key with the same letter. Play the scale shown in Today's warm-up, both hands at the same time, two notes per click at 80, clean on your first try of the day."},
+  {id:"hands", phase:1, name:"Both hands at once", kind:"self", pre:["five","pulse","bass"], gate:"A short piece where both hands play together, clean on your first try of the day."},
+  // phase 2
+  {id:"ledger", phase:2, name:"Ledger lines", kind:"drill", drill:"ledger", pre:["treble","bass"], target:30, gate:"30+ notes/min at 95%+ accuracy, on two different days."},
+  {id:"triads", phase:2, name:"Triad spelling", kind:"drill", drill:"triads", pre:["keysig"], target:10, gate:"10+ chords/min at 95%+ accuracy, on two different days."},
+  {id:"allmajor", phase:2, name:"All 12 major scales", kind:"self", pre:["scalesCGF","keysig"], gate:"Any major scale on request, two octaves hands together, clean cold."},
+  {id:"inversions", phase:2, name:"Triad inversions at the keys", kind:"self", pre:["triads","hands"], gate:"Any major or minor triad, all three positions, either hand, without hunting."},
+  {id:"pedal", phase:2, name:"Syncopated pedaling", kind:"self", pre:["hands"], gate:"Four chords connected with no blur and no gap. Pedal goes down after each new chord sounds."},
+  {id:"progressions", phase:2, name:"I–IV–V–vi in all keys", kind:"self", pre:["inversions","allmajor"], gate:"The progression in all 12 major keys with smooth voice leading."},
+  // phase 3
+  {id:"minor", phase:3, name:"Minor scales", kind:"self", pre:["allmajor"], gate:"Harmonic minor, two octaves hands together, in the keys you've learned."},
+  {id:"set", phase:3, name:"Performance set", kind:"self", pre:["progressions","pedal"], gate:"Three pieces played cold, for another person, without stopping."},
+];
+const SK = Object.fromEntries(SKILLS.map(s=>[s.id,s]));
+const LADDER = [1,3,7,21,45,90];
+const FAIL_TAGS = [
+  {tag:"reading", label:"Couldn't read it fast enough"},
+  {tag:"rhythm", label:"Rhythm or pulse"},
+  {tag:"fingering", label:"Fingering"},
+  {tag:"hands", label:"Hands together"},
+  {tag:"tension", label:"Tension or fatigue"},
+  {tag:"pedal", label:"Pedal"},
+  {tag:"memory", label:"Lost my place"},
+];
+const TAG_SKILL = {reading:null, rhythm:"pulse", fingering:"five", hands:"hands", tension:"posture", pedal:"pedal", memory:null};
+
+// ---------- dates ----------
+const pad = n=>String(n).padStart(2,"0");
+const ymd = d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const TODAY = ymd(new Date());
+const addDays = (s,n)=>{const d=new Date(s+"T12:00:00");d.setDate(d.getDate()+n);return ymd(d)};
+const daysBetween=(a,b)=>Math.round((new Date(b+"T12:00:00")-new Date(a+"T12:00:00"))/864e5);
+document.getElementById("today").textContent = new Date().toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"});
+
+// ---------- state ----------
+
+let S = {skills:{}, pieces:[], weak:{}, lastKey:null};
+let sessions=[], runs=[];
+let todayLog = {drillRuns:[], pieceResults:[], gateResults:[]};
+
+function sk(id){ return S.skills[id] || (S.skills[id]={status:"new", passDays:[], best:null, interval:0, due:null}); }
+function unlocked(id){ return SK[id].pre.every(p=>sk(p).status==="mastered"); }
+function status(id){
+  const s=sk(id);
+  if(s.status==="mastered") return (s.due && s.due<=TODAY) ? "due" : "mastered";
+  return unlocked(id) ? "learning" : "locked";
+}
+function store(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true}catch(e){$("#saveBanner").hidden=false;return false}}
+function load(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}}
+async function save(){ store("pr-state",S); }
+async function addRow(coll,row){ store("pr-"+coll, coll==="sessions"?sessions:runs); }
+
+function promote(id){ // mastery reached
+  const s=sk(id); s.status="mastered"; s.interval=0; s.due=addDays(TODAY,LADDER[0]);
+}
+function reviewPass(id){ const s=sk(id); s.interval=Math.min(s.interval+1,LADDER.length-1); s.due=addDays(TODAY,LADDER[s.interval]); }
+function reviewFail(id){ const s=sk(id); s.status="new"; s.passDays=[]; s.interval=0; s.due=null; }
+function flagWeak(id){ S.weak[id]={date:TODAY,count:((S.weak[id]||{}).count||0)+1}; }
+function clearWeak(id){ delete S.weak[id]; }
+
+// ---------- session planner ----------
+const KEYS_BASIC=["C","G","F"];
+const KEYS_ALL=["C","G","D","A","E","B","F♯","F","B♭","E♭","A♭","D♭"];
+function plan(){
+  const weakIds = Object.keys(S.weak).sort((a,b)=>S.weak[b].date.localeCompare(S.weak[a].date));
+  const weakSelf = weakIds.find(id=>SK[id].kind==="self");
+  const weakDrill = weakIds.find(id=>SK[id].kind==="drill" && status(id)!=="locked");
+  // warm-up: rotate keys (interleaving), or repair a flagged technique skill
+  const pool = sk("allmajor").status==="mastered"||status("allmajor")==="learning" ? KEYS_ALL : KEYS_BASIC;
+  const choices = pool.filter(k=>k!==S.lastKey);
+  const key = choices[(new Date().getDate()) % choices.length];
+  // drill choice
+  const drills = SKILLS.filter(s=>s.kind==="drill");
+  let drill = weakDrill
+    || drills.find(s=>status(s.id)==="due")?.id
+    || drills.find(s=>status(s.id)==="learning")?.id
+    || drills.filter(s=>status(s.id)==="mastered").sort((a,b)=>(sk(a.id).due||"").localeCompare(sk(b.id).due||""))[0]?.id
+    || "treble";
+  const dueSelf = SKILLS.filter(s=>s.kind==="self" && status(s.id)==="due");
+  const gates = SKILLS.filter(s=>s.kind==="self" && status(s.id)==="learning").slice(0,2);
+  const duePieces = S.pieces.filter(p=>p.stage==="review" && p.due<=TODAY).sort((a,b)=>a.due.localeCompare(b.due)).slice(0,2);
+  const newPiece = S.pieces.find(p=>p.stage==="learning");
+  return {key, weakSelf, drill, dueSelf, gates, duePieces, newPiece, weakIds};
+}
+
+// ---------- rendering ----------
+const $ = (sel,root=document)=>root.querySelector(sel);
+const el = (tag,attrs={},...kids)=>{const e=document.createElement(tag);for(const[k,v]of Object.entries(attrs)){if(k==="class")e.className=v;else if(k.startsWith("on"))e.addEventListener(k.slice(2),v);else if(v!==false&&v!=null)e.setAttribute(k,v===true?"":v)}for(const k of kids.flat()){if(k==null||k===false)continue;e.append(k.nodeType?k:document.createTextNode(k))}return e};
+const pill=(st)=>el("span",{class:"pill "+st},{locked:"Locked",learning:"Learning",mastered:"Mastered",due:"Review due",weak:"Flagged"}[st]);
+
+function renderToday(){
+  const root=$("#tab-today"); root.replaceChildren();
+  const p=plan();
+  const focusText = p.weakIds.length
+    ? `Flagged from your last misses: ${p.weakIds.map(id=>SK[id].name).join(", ")}. Today's warm-up and drill go there first.`
+    : `Nothing flagged. Today follows the normal rotation.`;
+  root.append(el("div",{class:"focus"},el("div",{class:"eyebrow"},"Next focus"),el("p",{},focusText)));
+
+  const phase0Done = ["keys","fingers","posture"].every(id=>sk(id).status==="mastered");
+  if(!phase0Done){
+    root.append(block("Start here",null,
+      el("p",{},"You're in the first week. Nothing below assumes you know anything about music yet."),
+      el("p",{},"1. Watch the video lesson further down first. Lesson 1 shows where the notes are and how fingers are numbered."),
+      el("p",{},"2. Do the warm-up and drill below. Both drills (key names and finger numbers) take about a week to master at a few minutes a day."),
+      el("p",{},"3. Pieces start once you can name the keys. Until then, the piece time goes to the video lesson.")));
+  }
+
+  // 1 warm-up
+  root.append(block("Warm-up",3,...warmup(p,phase0Done)));
+
+  // 2 fundamentals
+  root.append(block("Fundamentals drill",5,
+    el("p",{},`${SK[p.drill].name}: two 60-second runs. `, status(p.drill)==="due"?pill("due"):null),
+    el("p",{class:"small muted"},SK[p.drill].gate),
+    el("div",{class:"row"},el("button",{class:"btn primary",onclick:()=>{switchTab("drill");startDrill(SK[p.drill].drill)}},"Start drill"))));
+
+  // 3 sight-reading
+  root.append(block("Sight-reading",5,
+    el("p",{},"New material, played once, at a tempo where you don't stop."),
+    el("p",{class:"small"},el("a",{href:"https://sightreadingtraining.com",target:"_blank",rel:"noopener"},"sightreadingtraining.com"))));
+
+  // 4 spaced review
+  const rv = el("div",{class:"block"},blockHead("Spaced review",4));
+  const items=[...p.duePieces.map(pc=>({type:"piece",pc})),...p.dueSelf.map(s=>({type:"skill",s}))];
+  if(!items.length) rv.append(el("p",{class:"muted"},"Nothing due. Give these minutes to the new piece."));
+  for(const it of items){
+    if(it.type==="piece") rv.append(resultRow(`${it.pc.name} (cold run)`, ok=>pieceResult(it.pc.id,ok,true)));
+    else rv.append(resultRow(`${it.s.name}: ${it.s.gate}`, ok=>selfResult(it.s.id,ok)));
+  }
+  root.append(rv);
+
+  // 5 new piece + gate checks
+  const np = el("div",{class:"block"},blockHead("New piece",8));
+  if(sk("treble").status!=="mastered" && sk("keys").status!=="mastered"){
+    np.append(el("p",{class:"muted"},"Not yet. Pieces start after you can name the keys. The video lesson below gets these minutes."));
+  } else if(p.newPiece){
+    const n = p.newPiece.cleanDays.length;
+    np.append(el("p",{},p.newPiece.name),
+      el("p",{class:"small muted"},`Hardest 2–4 bars first, slowed until correct, then reconnect. End with one cold run. Clean cold runs: ${n} of 3 days.`),
+      resultRow("Cold run today", ok=>pieceResult(p.newPiece.id,ok,false)));
+  } else {
+    np.append(el("p",{class:"muted"},"No piece in progress."),el("div",{class:"row"},el("button",{class:"btn",onclick:()=>switchTab("pieces")},"Add a piece")));
+  }
+  root.append(np);
+  root.append(lessonBlock(sk("keys").status==="mastered"?null:8));
+
+  if(p.gates.length){
+    const g = el("div",{class:"block"},blockHead("Pass test",null),el("p",{class:"small muted"},"Try one of these cold, once. Three passing days unlocks what's next."));
+    for(const s of p.gates){ const n=sk(s.id).passDays.length; g.append(resultRow(`${s.name} (${n}/3): ${s.gate}`, ok=>selfResult(s.id,ok))); }
+    root.append(g);
+  }
+
+  // finish
+  const notes = el("textarea",{id:"sessNotes",placeholder:"What went wrong today? One line is enough."});
+  root.append(el("div",{class:"block"},blockHead("Finish",null),notes,
+    el("div",{class:"row"},el("button",{class:"btn primary",onclick:async(e)=>{
+      e.target.disabled=true;
+      S.lastKey = p.key;
+      const row={date:TODAY, at:new Date().toISOString(), notes:notes.value.trim(), warmupKey:p.key, ...todayLog};
+      sessions.unshift(row);
+      await addRow("sessions",row); await save();
+      todayLog={drillRuns:[],pieceResults:[],gateResults:[]};
+      e.target.textContent="Logged"; renderLog();
+    }},"Log today's session"))));
+}
+// ---------- keyboard + warm-up ----------
+const PC={C:0,D:2,E:4,F:5,G:7,A:9,B:11};
+function noteNames(key,semis){ // spell notes of a major key by letter
+  const L=key[0], acc=key.slice(1); const rpc=(PC[L]+({"":0,"♯":1,"♭":-1})[acc]+12)%12; const li="CDEFGAB".indexOf(L);
+  return semis.map((s,i)=>{const letter="CDEFGAB"[(li+[0,1,2,3,4,5,6,7][i])%7];let a=((rpc+s)-PC[letter])%12;if(a>6)a-=12;if(a<-6)a+=12;return {name:letter+({0:"",1:"♯","-1":"♭"}[a]||""),semi:rpc+s}});
+}
+function keyboardSVG(marks){ // marks: [{semi (0-23), label, top}]
+  const WW=24, W=14*WW, H=150; const whiteSemis=[0,2,4,5,7,9,11]; const blackAfter={0:1,1:3,3:6,4:8,5:10};
+  const m=Object.fromEntries(marks.map(x=>[x.semi,x]));
+  let s=`<svg class="kb" viewBox="0 0 ${W+2} ${H}" role="img" aria-label="Keyboard diagram">`;
+  for(let o=0;o<2;o++) whiteSemis.forEach((ws,i)=>{const semi=o*12+ws,x=1+(o*7+i)*WW,on=m[semi];
+    s+=`<rect class="w${on?" on":""}" x="${x}" y="1" width="${WW}" height="110" rx="2"/>`;
+    if(on){ if(on.label) s+=`<circle class="dot" cx="${x+WW/2}" cy="90" r="9"/><text class="dt" x="${x+WW/2}" y="94.5" text-anchor="middle">${on.label}</text>`;
+      if(on.top) s+=`<text class="nm" x="${x+WW/2}" y="132" text-anchor="middle">${on.top}</text>`; }});
+  for(let o=0;o<2;o++) for(const [wi,bs] of Object.entries(blackAfter)){const semi=o*12+bs,x=1+(o*7+ +wi+1)*WW-7,on=m[semi];
+    s+=`<rect class="b${on?" on":""}" x="${x}" y="1" width="14" height="68" rx="2"/>`;
+    if(on){ if(on.label) s+=`<text class="bt" x="${x+7}" y="60" text-anchor="middle">${on.label}</text>`; if(on.top) s+=`<text class="nm" x="${x+7}" y="146" text-anchor="middle">${on.top}</text>`; }}
+  return s+`</svg>`;
+}
+function svgBox(html){const d=el("div",{class:"kbwrap"});d.innerHTML=html;return d}
+function warmup(p,phase0Done){
+  if(p.weakSelf) return [el("p",{},`Repair: ${SK[p.weakSelf].name}.`),el("p",{class:"small muted"},SK[p.weakSelf].gate)];
+  if(!phase0Done){
+    const cs=noteNames("C",[0,2,4,5,7,9,11,12]);
+    return [svgBox(keyboardSVG(cs.map(n=>({semi:n.semi,top:n.name})))),
+      el("p",{},"Find every C on your piano: it's the white key just left of each group of two black keys. There are eight of them."),
+      el("p",{},"Then, starting from the C nearest the middle, play the eight white keys shown, one at a time, with your right index finger, saying each letter out loud. Go up, then back down. Do it three times.")];
+  }
+  const scaleStage = ["C","G","F"].includes(p.key) && status("five")==="mastered";
+  if(scaleStage){
+    const ns=noteNames(p.key,[0,2,4,5,7,9,11,12]);
+    const rh = p.key==="F"?[1,2,3,4,1,2,3,4]:[1,2,3,1,2,3,4,5];
+    return [svgBox(keyboardSVG(ns.map((n,i)=>({semi:n.semi,label:rh[i],top:n.name})))),
+      el("p",{},`${p.key} major scale. Right hand: play these eight keys going up, using the finger numbers shown (1 = thumb, 5 = pinky). Where the numbers jump back to 1, tuck your thumb under your hand to reach that key. Then come back down the same way.`),
+      el("p",{},"Left hand: the same eight keys an octave lower (the same letters further left), fingers 5 4 3 2 1 3 2 1 going up."),
+      el("p",{class:"small muted"},"Metronome at 60, one key per click. Wrists level and loose. If your forearm tightens, stop and shake it out.")];
+  }
+  const ns=noteNames(p.key,[0,2,4,5,7]);
+  return [svgBox(keyboardSVG(ns.map((n,i)=>({semi:n.semi,label:i+1,top:n.name})))),
+    el("p",{},`Five-finger pattern on ${p.key}. Right hand: thumb (1) on ${ns[0].name}, and each finger rests on the next key as shown. Play 1 2 3 4 5 4 3 2 1, one key per metronome click at 60.`),
+    el("p",{},`Left hand: same five keys, but flipped: pinky (5) on ${ns[0].name}, thumb (1) on ${ns[4].name}. Play 5 4 3 2 1 2 3 4 5.`),
+    el("p",{class:"small muted"},"Keep every note the same loudness. Keys change each day so you don't get comfortable in one spot.")];
+}
+
+const PLAYLIST="PLpOuhygfD7QnP46wUgQudOySX_z2UOhXs";
+function lessonBlock(mins){
+  const n=S.lesson||1;
+  const frame=el("div",{class:"video"});
+  frame.innerHTML=`<iframe src="https://www.youtube-nocookie.com/embed/videoseries?list=${PLAYLIST}&index=${n}" title="Bill Hilton, How To Play Piano For Beginners, lesson ${n}" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen loading="lazy"></iframe>`;
+  return block(`Video lesson ${n}`,mins,
+    el("p",{},"Bill Hilton's free beginner course. Watch with the piano in front of you, pause, and copy everything he plays. Stay on a lesson until you can play its examples."),
+    frame,
+    el("div",{class:"row"},
+      el("button",{class:"btn",disabled:n<=1,onclick:()=>{S.lesson=Math.max(1,n-1);save();renderToday()}},"Previous"),
+      el("button",{class:"btn primary",onclick:()=>{S.lesson=n+1;save();renderToday()}},`I can play lesson ${n}'s examples`)));
+}
+function blockHead(title,mins){return el("div",{class:"block-head"},el("h3",{},title),mins?el("span",{class:"mins"},mins+" min"):null)}
+function block(title,mins,...kids){return el("div",{class:"block"},blockHead(title,mins),...kids)}
+
+function resultRow(label,cb){
+  const wrap=el("div",{class:"panel",style:"gap:6px;padding-top:6px;border-top:1px solid var(--line)"});
+  const status=el("span",{class:"small muted"});
+  const chips=el("div",{class:"chips",hidden:true});
+  const tags=new Set();
+  for(const t of FAIL_TAGS){const c=el("button",{class:"chip","aria-pressed":"false",onclick:()=>{tags.has(t.tag)?tags.delete(t.tag):tags.add(t.tag);c.setAttribute("aria-pressed",tags.has(t.tag))}},t.label);chips.append(c)}
+  const confirm=el("button",{class:"btn bad",hidden:true,onclick:()=>{cb(false,[...tags]);diagnose([...tags]);done("Logged as a miss. Flagged skills move up in tomorrow's plan.")}},"Save miss");
+  const yes=el("button",{class:"btn good",onclick:()=>{cb(true,[]);done("Logged as clean.")}},"Clean");
+  const no=el("button",{class:"btn bad",onclick:()=>{chips.hidden=false;confirm.hidden=false;status.textContent="What broke down?"}},"Missed");
+  function done(msg){yes.disabled=no.disabled=confirm.disabled=true;chips.hidden=true;confirm.hidden=true;status.textContent=msg;save()}
+  wrap.append(el("p",{},label),el("div",{class:"row"},yes,no,status),chips,el("div",{class:"row"},confirm));
+  return wrap;
+}
+function diagnose(tags){
+  for(const t of tags){
+    if(t==="reading"){ // pick the weakest unlocked reading skill
+      const r=["treble","bass","ledger"].filter(id=>status(id)!=="locked");
+      const target=r.find(id=>status(id)==="learning")||r[r.length-1];
+      if(target) flagWeak(target);
+    } else if(TAG_SKILL[t]) flagWeak(TAG_SKILL[t]);
+  }
+}
+function selfResult(id,ok){
+  const s=sk(id); const wasMastered=s.status==="mastered";
+  todayLog.gateResults.push({skill:id,ok});
+  if(wasMastered){ ok?reviewPass(id):reviewFail(id); }
+  else if(ok){ if(!s.passDays.includes(TODAY)) s.passDays.push(TODAY); if(s.passDays.length>=3) promote(id); }
+  else { s.passDays=[]; }
+  if(ok) clearWeak(id);
+  renderAllLater();
+}
+function pieceResult(pid,ok,isReview,tags){
+  const pc=S.pieces.find(x=>x.id===pid); if(!pc) return;
+  todayLog.pieceResults.push({piece:pc.name,ok,review:isReview});
+  pc.history=(pc.history||[]).concat([{date:TODAY,ok}]);
+  if(isReview){ if(ok){pc.interval=Math.min((pc.interval||0)+1,LADDER.length-1);pc.due=addDays(TODAY,LADDER[pc.interval]);} else {pc.interval=0;pc.due=addDays(TODAY,1);} }
+  else if(ok){ if(!pc.cleanDays.includes(TODAY)) pc.cleanDays.push(TODAY); if(pc.cleanDays.length>=3){pc.stage="review";pc.interval=0;pc.due=addDays(TODAY,1);} }
+  else pc.cleanDays=[];
+  renderAllLater();
+}
+let rt=null; function renderAllLater(){clearTimeout(rt);rt=setTimeout(()=>{renderSkills();renderPieces();},50)}
+
+function renderSkills(){
+  const root=$("#tab-skills"); root.replaceChildren();
+  root.append(el("p",{class:"muted"},"Each skill unlocks when its prerequisites are mastered. Mastered skills come back for review on a widening schedule: 1, 3, 7, 21, 45, then 90 days. Missing a review sends a skill back to learning."));
+  const wrap=el("div",{class:"skills"});
+  for(const ph of [0,1,2,3]){
+    const box=el("div",{class:"phase"},el("div",{class:"eyebrow"},["Start here · First week","Phase 1 · Literacy","Phase 2 · Fluency","Phase 3 · Musicianship"][ph]));
+    for(const s of SKILLS.filter(x=>x.phase===ph)){
+      const st=status(s.id); const d=sk(s.id);
+      const meta = st==="locked" ? "Needs: "+s.pre.filter(p=>sk(p).status!=="mastered").map(p=>SK[p].name).join(", ")
+        : d.status==="mastered" ? `Next review ${d.due}`
+        : s.kind==="self" ? `${d.passDays.length}/3 passing days` : `${d.passDays.length}/2 passing days${d.best?` · best ${d.best.npm}/min at ${d.best.acc}%`:""}`;
+      box.append(el("div",{class:"skill"},
+        el("div",{},el("b",{},s.name)," ",S.weak[s.id]?pill("weak"):null),
+        pill(st),
+        el("div",{class:"gate"},s.gate," ",el("span",{class:"mono"},"· "+meta))));
+    }
+    wrap.append(box);
+  }
+  root.append(wrap);
+}
+
+function renderPieces(){
+  const root=$("#tab-pieces"); root.replaceChildren();
+  const name=el("input",{type:"text",id:"pieceName",placeholder:"e.g. Beyer Op. 101 No. 12"});
+  const src=el("input",{type:"text",id:"pieceSrc",placeholder:"Where it's from (optional)"});
+  root.append(el("div",{class:"block"},blockHead("Add a piece",null),name,src,
+    el("p",{class:"small muted"},"Pick pieces that reuse skills you already have, so old skills get reviewed for free. Free scores: ",el("a",{href:"https://imslp.org",target:"_blank",rel:"noopener"},"IMSLP"),"."),
+    el("div",{class:"row"},el("button",{class:"btn primary",onclick:()=>{
+      if(!name.value.trim())return;
+      S.pieces.push({id:Date.now().toString(36),name:name.value.trim(),source:src.value.trim(),stage:"learning",cleanDays:[],interval:0,due:null,history:[],added:TODAY});
+      name.value="";src.value="";save();renderPieces();renderToday();
+    }},"Add piece"))));
+  if(!S.pieces.length){root.append(el("p",{class:"muted"},"No pieces yet. Add the first one above."));return}
+  const t=el("table",{},el("thead",{},el("tr",{},el("th",{},"Piece"),el("th",{},"Stage"),el("th",{},"Next"))));
+  const tb=el("tbody");
+  for(const pc of S.pieces){
+    const stage = pc.stage==="learning"?pill("learning"):(pc.due<=TODAY?pill("due"):pill("mastered"));
+    tb.append(el("tr",{},el("td",{},pc.name,pc.source?el("div",{class:"small muted"},pc.source):null),el("td",{},stage),
+      el("td",{class:"mono small"},pc.stage==="learning"?`${pc.cleanDays.length}/3 clean days`:pc.due)));
+  }
+  t.append(tb); root.append(el("div",{class:"tablewrap"},t));
+}
+
+function renderLog(){
+  const root=$("#tab-log"); root.replaceChildren();
+  // streak & minutes
+  const days=[...new Set(sessions.map(s=>s.date))].sort().reverse();
+  let streak=0; for(let i=0;;i++){ if(days.includes(addDays(TODAY,-i))) streak++; else if(i===0) continue; else break; }
+  const last7=days.filter(d=>daysBetween(d,TODAY)<7).length;
+  root.append(el("div",{class:"stats"},
+    el("div",{class:"stat"},el("span",{class:"eyebrow"},"Streak"),el("b",{},streak+" d")),
+    el("div",{class:"stat"},el("span",{class:"eyebrow"},"Last 7 days"),el("b",{},last7+"/7")),
+    el("div",{class:"stat"},el("span",{class:"eyebrow"},"Skills mastered"),el("b",{},SKILLS.filter(s=>sk(s.id).status==="mastered").length+"/"+SKILLS.length))));
+
+  // weekly review via Claude
+  const out=el("div",{class:"review-out muted"},"Copies your last two weeks of sessions and drill runs so you can paste them to Claude in the Piano project for a blunt review.");
+  const btn=el("button",{class:"btn primary",onclick:()=>weeklyReview(btn,out)},"Copy my last two weeks for Claude");
+  root.append(el("div",{class:"block"},blockHead("Weekly review",null),out,el("div",{class:"row"},btn)));
+
+  const file=el("input",{type:"file",id:"importFile",accept:".json,application/json",hidden:true,onchange:async()=>{
+    try{const d=JSON.parse(await file.files[0].text());S=d.state;sessions=d.sessions||[];runs=d.runs||[];save();store("pr-sessions",sessions);store("pr-runs",runs);renderAll();switchTab("log")}catch(e){alert("That file isn't a Practice Room backup.")}}});
+  root.append(el("div",{class:"block"},blockHead("Backup",null),
+    el("p",{class:"small muted"},"Your progress lives in this browser only. Download a backup now and then, and restore it if you switch browsers or devices."),
+    el("div",{class:"row"},el("button",{class:"btn",onclick:()=>{const b=new Blob([JSON.stringify({state:S,sessions,runs},null,1)],{type:"application/json"});const a=el("a",{href:URL.createObjectURL(b),download:`practice-room-${TODAY}.json`});document.body.append(a);a.click();a.remove()}},"Download backup"),
+      el("button",{class:"btn",onclick:()=>file.click()},"Restore from backup"),file)));
+  if(!sessions.length){root.append(el("p",{class:"muted"},"No sessions logged yet. Finish today's plan and tap “Log today's session.”"));return}
+  const t=el("table",{},el("thead",{},el("tr",{},el("th",{},"Date"),el("th",{},"Drills"),el("th",{},"Pieces"),el("th",{},"Notes"))));
+  const tb=el("tbody");
+  for(const s of sessions.slice(0,30)){
+    tb.append(el("tr",{},el("td",{class:"mono small"},s.date),
+      el("td",{class:"small"},(s.drillRuns||[]).map(r=>`${r.drill} ${r.npm}/min ${r.acc}%`).join(", ")||"—"),
+      el("td",{class:"small"},(s.pieceResults||[]).map(r=>`${r.piece} ${r.ok?"✓":"✗"}`).join(", ")||"—"),
+      el("td",{class:"small"},s.notes||"")));
+  }
+  t.append(tb); root.append(el("div",{class:"tablewrap"},t));
+}
+
+function reviewPrompt(){
+  const since=addDays(TODAY,-14);
+  const data={today:TODAY, skills:SKILLS.map(s=>({id:s.id,name:s.name,phase:s.phase,status:status(s.id),state:sk(s.id)})),
+    pieces:S.pieces, lesson:S.lesson||1, flagged:S.weak, sessions:sessions.filter(s=>s.date>=since), drillRuns:runs.filter(r=>r.date>=since)};
+  return `Weekly piano review, please. Here's my Practice Room data for the last two weeks:\n\n${JSON.stringify(data)}`;
+}
+async function weeklyReview(btn,out){
+  const text=reviewPrompt();
+  try{ await navigator.clipboard.writeText(text); out.textContent="Copied. Paste it into the Piano project chat and Claude will review it."; }
+  catch(e){ out.replaceChildren(el("p",{},"Copy this and paste it into the Piano project chat:"),el("textarea",{readonly:true,style:"min-height:120px"},text)); }
+}
+
+// ---------- drills ----------
+const LETTERS=["C","D","E","F","G","A","B"];
+const POOLS={
+  treble:{clef:"treble",notes:range(29,39)},
+  bass:{clef:"bass",notes:range(17,27)},
+  ledger:{mixed:true,notes:[...range(26,28).map(d=>["treble",d]),...range(40,42).map(d=>["treble",d]),...range(28,30).map(d=>["bass",d]),...range(14,16).map(d=>["bass",d])]},
+};
+function range(a,b){const r=[];for(let i=a;i<=b;i++)r.push(i);return r}
+const KEYSIGS=[["C",0,""],["G",1,"#"],["D",2,"#"],["A",3,"#"],["E",4,"#"],["B",5,"#"],["F♯",6,"#"],["C♯",7,"#"],["F",1,"b"],["B♭",2,"b"],["E♭",3,"b"],["A♭",4,"b"],["D♭",5,"b"],["G♭",6,"b"],["C♭",7,"b"]];
+const SHARP_POS=[38,35,39,36,33,37,34], FLAT_POS=[34,37,33,36,32,35,31];
+
+function staffSVG(clef,items){ // items: [{d, glyph?, x}]
+  const W=300,H=150,top=45,gap=12; const bottom=top+4*gap;
+  const ref = clef==="treble"?30:18; // bottom line diatonic number
+  const y = d=> bottom-(d-ref)*gap/2;
+  let s=`<svg class="staff" viewBox="0 0 ${W} ${H}" role="img" aria-label="${clef} staff">`;
+  for(let i=0;i<5;i++) s+=`<line x1="10" x2="${W-10}" y1="${top+i*gap}" y2="${top+i*gap}" stroke-width="1.2"/>`;
+  s+=`<text x="16" y="${clef==="treble"?bottom+4:top+gap*2+2}" font-size="${clef==="treble"?62:40}" font-family="serif">${clef==="treble"?"𝄞":"𝄢"}</text>`;
+  for(const it of items){
+    const yy=y(it.d);
+    if(it.glyph){ s+=`<text x="${it.x}" y="${yy+ (it.glyph==="♭"?4:6)}" font-size="22" font-family="serif" text-anchor="middle">${it.glyph}</text>`; continue; }
+    // ledger lines
+    for(let d=ref-2; d>=it.d; d-=2) s+=`<line x1="${it.x-15}" x2="${it.x+15}" y1="${y(d)}" y2="${y(d)}" stroke-width="1.2"/>`;
+    for(let d=ref+10; d<=it.d; d+=2) s+=`<line x1="${it.x-15}" x2="${it.x+15}" y1="${y(d)}" y2="${y(d)}" stroke-width="1.2"/>`;
+    s+=`<ellipse class="fill" cx="${it.x}" cy="${yy}" rx="8" ry="6" transform="rotate(-20 ${it.x} ${yy})"/>`;
+  }
+  return s+`</svg>`;
+}
+
+// triads
+const LETTER_PC={C:0,D:2,E:4,F:5,G:7,A:9,B:11};
+const ACC={"":0,"♯":1,"♭":-1,"𝄪":2,"𝄫":-2};
+const ACC_BY={0:"",1:"♯",[-1]:"♭",2:"𝄪",[-2]:"𝄫"};
+function spell(root,minor){
+  const L=root[0], acc=root.slice(1); const rpc=(LETTER_PC[L]+ACC[acc]+12)%12;
+  const li=LETTERS.indexOf(L);
+  return [[0,0],[2,minor?3:4],[4,7]].map(([steps,semi])=>{
+    const letter=LETTERS[(li+steps)%7]; let a=((rpc+semi)-LETTER_PC[letter])%12; if(a>6)a-=12; if(a<-6)a+=12;
+    return letter+ACC_BY[a];
+  });
+}
+const MAJ_ROOTS=["C","G","D","A","E","B","F♯","D♭","A♭","E♭","B♭","F"], MIN_ROOTS=["A","E","B","F♯","C♯","G♯","D","G","C","F","B♭","E♭"];
+
+let drillState=null;
+function renderDrillHome(){
+  const root=$("#tab-drill"); root.replaceChildren();
+  root.append(el("p",{class:"muted"},"Each run lasts 60 seconds. Speed counts only correct answers. Pass a skill's target on two different days to master it. Keyboard works too: type the letter."));
+  for(const s of SKILLS.filter(x=>x.kind==="drill")){
+    const st=status(s.id), d=sk(s.id);
+    root.append(el("div",{class:"block"},
+      el("div",{class:"block-head"},el("h3",{},s.name),pill(st)),
+      el("p",{class:"small muted"},s.gate+(d.best?` Best: ${d.best.npm}/min at ${d.best.acc}%.`:"")),
+      el("div",{class:"row"},el("button",{class:"btn"+(st==="locked"?"":" primary"),disabled:st==="locked",onclick:()=>startDrill(s.drill)},st==="locked"?"Locked":"Start 60-second run"))));
+  }
+}
+function startDrill(kind){
+  const root=$("#tab-drill"); root.replaceChildren();
+  const skillId={keys:"keys",fingers:"fingers",treble:"treble",bass:"bass",ledger:"ledger",keysig:"keysig",triads:"triads"}[kind];
+  drillState={kind,skillId,correct:0,total:0,end:0,timer:null,current:null};
+  const timer=el("div",{class:"timer"},"60");
+  const score=el("div",{class:"small muted mono"},"0 correct · 0 tried");
+  const stage=el("div",{class:"drill-stage"});
+  const prompt=el("div",{style:"width:100%;display:flex;justify-content:center"});
+  const answers=el("div",{class:"answers"+(kind==="keysig"||kind==="triads"||kind==="fingers"?" wide":"")});
+  stage.append(prompt,answers);
+  const startBtn=el("button",{class:"btn primary",onclick:()=>{startBtn.hidden=true;go()}},"Start");
+  root.append(el("div",{class:"block"},
+    el("div",{class:"block-head"},el("h3",{},SK[skillId].name),timer),score,stage,
+    el("div",{class:"row"},startBtn,el("button",{class:"btn",onclick:()=>{stop(false);renderDrillHome()}},"Back"))));
+  prompt.innerHTML=`<p class="muted">Ready when you are.</p>`;
+
+  function next(){
+    let q;
+    if(kind==="keys"){const ws=[0,2,4,5,7,9,11];const o=Math.random()<.5?0:12;const i=Math.floor(Math.random()*7);q={svg:keyboardSVG([{semi:o+ws[i],label:"?"}]),ans:LETTERS[i],opts:LETTERS}}
+    else if(kind==="fingers"){const F=["Thumb","Index","Middle","Ring","Pinky"];const n=Math.floor(Math.random()*5);const hand=Math.random()<.5?"left":"right";
+      q=Math.random()<.5?{html:`<h2>Finger ${n+1}, ${hand} hand</h2>`,ans:F[n],opts:F}:{html:`<h2>${F[n]}, ${hand} hand</h2><p class="muted">Which number?</p>`,ans:String(n+1),opts:["1","2","3","4","5"]}}
+    else if(kind==="treble"||kind==="bass"){const d=pick(POOLS[kind].notes);q={svg:staffSVG(POOLS[kind].clef,[{d,x:180}]),ans:LETTERS[d%7],opts:LETTERS}}
+    else if(kind==="ledger"){const [c,d]=pick(POOLS.ledger.notes);q={svg:staffSVG(c,[{d,x:180}]),ans:LETTERS[d%7],opts:LETTERS}}
+    else if(kind==="keysig"){const [name,n,t]=pick(KEYSIGS);const pos=t==="#"?SHARP_POS:FLAT_POS;q={svg:staffSVG("treble",pos.slice(0,n).map((d,i)=>({d,glyph:t==="#"?"♯":"♭",x:80+i*16}))),ans:name,opts:KEYSIGS.map(k=>k[0])}}
+    else {const minor=Math.random()<.5;const root=pick(minor?MIN_ROOTS:MAJ_ROOTS);const right=spell(root,minor);
+      const wrong=new Set();while(wrong.size<3){const w=[...right];const i=1+Math.floor(Math.random()*2);const L=w[i][0];const a=ACC[w[i].slice(1)]+(Math.random()<.5?1:-1);if(Math.abs(a)>2)continue;w[i]=L+ACC_BY[a];wrong.add(w.join(" "))}
+      const opts=shuffle([right.join(" "),...wrong]);q={html:`<h2>${root} ${minor?"minor":"major"}</h2>`,ans:right.join(" "),opts}}
+    drillState.current=q;
+    prompt.innerHTML=q.svg||q.html;
+    answers.replaceChildren(...q.opts.map(o=>el("button",{onclick:e=>answer(o,e.target)},o)));
+  }
+  function answer(o,btn){
+    if(!drillState||!drillState.end)return;
+    drillState.total++; const ok=o===drillState.current.ans; if(ok)drillState.correct++;
+    btn.classList.add(ok?"hit":"miss");
+    if(!ok){const r=[...answers.children].find(b=>b.textContent===drillState.current.ans); if(r) r.classList.add("hit");}
+    score.textContent=`${drillState.correct} correct · ${drillState.total} tried`;
+    setTimeout(next, ok?120:1100);
+  }
+  drillState.keyHandler=e=>{ if(!drillState?.end)return; const k=e.key.toUpperCase(); if(LETTERS.includes(k)&&drillState.current.opts===LETTERS){const b=[...answers.children].find(b=>b.textContent===k);if(b)answer(k,b)} };
+  document.addEventListener("keydown",drillState.keyHandler);
+  function go(){
+    drillState.end=Date.now()+60000; next();
+    drillState.timer=setInterval(()=>{const left=Math.max(0,Math.ceil((drillState.end-Date.now())/1000));timer.textContent=left;if(left<=0)stop(true)},200);
+  }
+  function stop(finished){
+    if(!drillState)return; clearInterval(drillState.timer); document.removeEventListener("keydown",drillState.keyHandler);
+    const st=drillState; drillState=null; if(!finished)return;
+    const npm=st.correct, acc=st.total?Math.round(100*st.correct/st.total):0;
+    const s=sk(skillId), target=SK[skillId].target, pass=npm>=target&&acc>=95;
+    const run={date:TODAY,at:new Date().toISOString(),drill:kind,npm,acc,pass};
+    runs.unshift(run); todayLog.drillRuns.push(run); addRow("runs",run);
+    if(!s.best||npm*acc>s.best.npm*s.best.acc) s.best={npm,acc,date:TODAY};
+    let verdict;
+    if(s.status==="mastered"){ if(npm>=target*.85&&acc>=90){reviewPass(skillId);verdict="Review passed. Next review pushed out.";} else {reviewFail(skillId);flagWeak(skillId);verdict="Review missed. Back to learning, and flagged for tomorrow.";} }
+    else if(pass){ if(!s.passDays.includes(TODAY))s.passDays.push(TODAY); clearWeak(skillId); if(s.passDays.length>=2){promote(skillId);verdict="Mastered. It'll come back for review tomorrow, then less and less often.";} else verdict=`Passed. Pass again on another day to master it.`; }
+    else verdict = acc<95 ? `Accuracy ${acc}% is under 95%. Slow down: accuracy first, then speed.` : `Accurate but ${npm}/min is under ${target}. Push the pace a little.`;
+    save(); renderSkills(); renderToday();
+    prompt.innerHTML=""; answers.replaceChildren();
+    prompt.append(el("div",{class:"panel",style:"align-items:center;text-align:center"},
+      el("div",{class:"stats",style:"justify-content:center"},el("div",{class:"stat"},el("span",{class:"eyebrow"},"Speed"),el("b",{},npm+"/min")),el("div",{class:"stat"},el("span",{class:"eyebrow"},"Accuracy"),el("b",{},acc+"%"))),
+      el("p",{},verdict),el("div",{class:"row",style:"justify-content:center"},el("button",{class:"btn primary",onclick:()=>startDrill(kind)},"Run again"))));
+  }
+}
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
+
+// ---------- tabs ----------
+function switchTab(name){
+  document.querySelectorAll("nav button").forEach(b=>b.setAttribute("aria-selected",b.dataset.tab===name));
+  document.querySelectorAll("section.panel").forEach(s=>s.hidden=s.id!=="tab-"+name);
+  if(name==="drill"&&!drillState) renderDrillHome();
+  try{localStorage.setItem("pr-tab",name)}catch{}
+}
+document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>switchTab(b.dataset.tab)));
+
+function renderAll(){renderToday();renderSkills();renderPieces();renderLog();renderDrillHome()}
+// ---------- load ----------
+S=Object.assign({skills:{},pieces:[],weak:{},lastKey:null,lesson:1},load("pr-state",{pieces:[{id:"seed1",name:"Beyer Op. 101, first exercises (Nos. 1–12)",source:"IMSLP, free",stage:"learning",cleanDays:[],interval:0,due:null,history:[],added:TODAY}]}));
+sessions=load("pr-sessions",[]); runs=load("pr-runs",[]);
+renderAll();
+try{const t=localStorage.getItem("pr-tab");if(t&&t!=="drill")switchTab(t)}catch{}
+</script>
+</body>
+</html>
