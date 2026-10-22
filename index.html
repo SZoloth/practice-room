@@ -142,12 +142,12 @@ const SKILLS = [
   {id:"fingers", phase:0, name:"Finger numbers", kind:"drill", drill:"fingers", pre:[], target:30, gate:"Piano music numbers your fingers: thumb = 1, index = 2, middle = 3, ring = 4, pinky = 5, the same on both hands. Target: 30 a minute at 95%+, on two different days."},
   {id:"posture", phase:0, name:"Sitting and hand shape", kind:"self", pre:[], gate:"Sit so your forearms are level with the keys and your elbows hang slightly in front of your body. Curve your fingers as if holding a tennis ball and press keys with the fingertip pads. Film 30 seconds of yourself and check: wrists level (not sagging below the keys), shoulders down, no knuckle caving in."},
   // phase 1
-  {id:"pulse", phase:1, name:"Steady beat", kind:"self", pre:[], gate:"A metronome clicks at an even speed (free: search “online metronome”). Play any one key once per click at 60, then 80, then 100 clicks per minute for 30 seconds each, without rushing ahead or falling behind."},
-  {id:"five", phase:1, name:"Five-finger patterns", kind:"self", pre:["posture","fingers","keys"], gate:"Play the five-key pattern shown in Today's warm-up with each hand: up and back down, one key per click at 80, every note equally loud."},
+  {id:"pulse", phase:1, name:"Steady beat", kind:"self", pre:[], gate:"A metronome clicks at an even speed; there's one in the warm-up step. In the test the app clicks four times, then goes quiet: keep playing any one key, once per beat, 12 times, at that same speed. It listens through the mic and measures how steady you were. Three rounds: 60, 80 and 100 beats a minute."},
+  {id:"five", phase:1, name:"Five-finger patterns", kind:"self", pre:["posture","fingers","keys"], gate:"Play the five-key pattern shown in Today's warm-up with each hand: up and back down, one key per beat at 80, every note equally loud. The app counts you in and listens for the right notes, steady timing and even loudness."},
   {id:"treble", phase:1, name:"Reading notes: treble clef", kind:"drill", drill:"treble", pre:["keys"], target:40, gate:"Sheet music shows notes on five lines. The treble clef (𝄞) staff is usually for the right hand. Learn it from musictheory.net's free “The Staff, Clefs, and Ledger Lines” and “Note Identification” lessons, then drill here. Target: 40 a minute at 95%+, on two different days."},
   {id:"bass", phase:1, name:"Reading notes: bass clef", kind:"drill", drill:"bass", pre:["treble"], target:40, gate:"The bass clef (𝄢) staff is usually for the left hand. Same lines, different letters. Target: 40 a minute at 95%+, on two different days."},
   {id:"keysig", phase:1, name:"Key signatures", kind:"drill", drill:"keysig", pre:["treble"], target:15, gate:"The ♯ and ♭ symbols at the start of a line tell you which black keys the piece uses. Learn them from musictheory.net's “Key Signatures” lesson. Target: 15 a minute at 95%+, on two different days."},
-  {id:"scalesCGF", phase:1, name:"C, G and F major scales", kind:"self", pre:["five","pulse"], gate:"A scale is eight keys in a row up to the next key with the same letter. Play the scale shown in Today's warm-up, both hands at the same time, two notes per click at 80, clean on your first try of the day."},
+  {id:"scalesCGF", phase:1, name:"C, G and F major scales", kind:"self", pre:["five","pulse"], gate:"A scale is eight keys in a row up to the next key with the same letter. Play the scale shown in Today's warm-up, both hands at the same time, up and back down, two notes per click at 80, clean on your first try of the day. The app counts you in and listens."},
   {id:"hands", phase:1, name:"Both hands at once", kind:"self", pre:["five","pulse","bass"], gate:"A short piece where both hands play together, clean on your first try of the day."},
   // phase 2
   {id:"ledger", phase:2, name:"Ledger lines", kind:"drill", drill:"ledger", pre:["treble","bass"], target:30, gate:"30+ notes/min at 95%+ accuracy, on two different days."},
@@ -427,8 +427,175 @@ async function weeklyReview(btn,out){
   catch(e){ out.replaceChildren(el("p",{},"Copy this and paste it into the Piano project chat:"),el("textarea",{readonly:true,style:"min-height:120px"},text)); }
 }
 
+// ---------- listening (mic) ----------
+// The P-95 has no MIDI out, so tests that used to be self-graded listen through the mic instead.
+const NOTE_NAMES=["C","C♯","D","E♭","E","F","F♯","G","A♭","A","B♭","B"];
+const midiName=m=>NOTE_NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
+const pcName=m=>NOTE_NAMES[((m%12)+12)%12];
+const EAR={ctx:null,stream:null,node:null,sr:48000,ring:new Float32Array(1<<17),pos:0,floor:1e-3,hist:[],lastOnset:-1e9,pending:[],subs:new Set()};
+function audioCtx(){ if(!EAR.ctx) EAR.ctx=new (window.AudioContext||window.webkitAudioContext)(); if(EAR.ctx.state==="suspended") EAR.ctx.resume(); return EAR.ctx; }
+async function earOn(){
+  if(EAR.node) return true;
+  try{
+    const ctx=audioCtx();
+    EAR.stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+    const src=ctx.createMediaStreamSource(EAR.stream), node=ctx.createScriptProcessor(512,1,1);
+    EAR.sr=ctx.sampleRate; node.onaudioprocess=e=>earBlock(e.inputBuffer.getChannelData(0));
+    src.connect(node); node.connect(ctx.destination); EAR.node=node; return true;
+  }catch(e){ console.warn(e); return false; }
+}
+function earListen(fn){ EAR.subs.add(fn); return ()=>EAR.subs.delete(fn); }
+const earNow=()=>EAR.pos/EAR.sr;
+function earSlice(start,n){ const R=EAR.ring,M=R.length-1,out=new Float32Array(n); for(let i=0;i<n;i++) out[i]=R[(start+i)&M]; return out; }
+function earBlock(x){ // called for every 512-sample block of mic input
+  const R=EAR.ring,M=R.length-1,start=EAR.pos; let ss=0;
+  for(let i=0;i<x.length;i++){ R[(start+i)&M]=x[i]; ss+=x[i]*x[i]; }
+  EAR.pos+=x.length;
+  const rms=Math.sqrt(ss/x.length), sr=EAR.sr;
+  EAR.floor = rms<EAR.floor ? EAR.floor*.7+rms*.3 : Math.min(EAR.floor*1.002, .05);
+  EAR.floor=Math.max(EAR.floor,2e-4);
+  const before=Math.min(...EAR.hist); EAR.hist.push(rms); if(EAR.hist.length>4) EAR.hist.shift();
+  for(const p of EAR.pending) if(EAR.pos<p.at+p.n) p.peak=Math.max(p.peak,rms);
+  // a note starts where loudness jumps well above both the room noise and the last ~45ms.
+  // Smaller jumps are kept as "soft" onsets: too unreliable to count as notes, but enough to catch
+  // the second hand landing late on top of the first.
+  const loud=rms>Math.max(8*EAR.floor,.002), rise=rms/before;
+  if(loud && rise>1.35 && start-EAR.lastOnset>.08*sr){
+    EAR.lastOnset=start;
+    EAR.pending.push({t:start/sr,at:start+Math.round(.03*sr),n:sr>60000?4096:2048,peak:rms,before});
+  }
+  while(EAR.pending.length && EAR.pos>=EAR.pending[0].at+EAR.pending[0].n){
+    const p=EAR.pending.shift(), y=yin(earSlice(p.at,p.n),sr);
+    const note={t:p.t,midi:y?Math.round(69+12*Math.log2(y.f/440)):null,freq:y?y.f:null,level:20*Math.log10(p.peak),soft:p.peak<1.8*p.before};
+    for(const fn of [...EAR.subs]) fn(note);
+  }
+}
+function yin(x,sr){ // fundamental frequency of a window, or null if unclear
+  const W=x.length>>1, minT=Math.floor(sr/2200), maxT=Math.min(W-1,Math.floor(sr/50));
+  const c=new Float32Array(maxT+2); let run=0;
+  for(let t=1;t<=maxT;t++){ let s=0; for(let i=0;i<W;i++){const v=x[i]-x[i+t];s+=v*v} run+=s; c[t]=run?s*t/run:1; }
+  let tau=-1;
+  for(let t=minT;t<=maxT;t++) if(c[t]<.15){ while(t<maxT&&c[t+1]<c[t])t++; tau=t; break; }
+  if(tau<0){ let m=1; for(let t=minT;t<=maxT;t++) if(c[t]<m){m=c[t];tau=t} if(m>.35) return null; }
+  const a=c[tau-1]||c[tau], b=c[tau], d=c[tau+1]||c[tau], den=a+d-2*b;
+  return {f:sr/(tau+(den?.5*(a-d)/den:0)), clarity:1-b};
+}
+function click(when,accent){
+  const ctx=audioCtx(), o=ctx.createOscillator(), g=ctx.createGain();
+  o.frequency.value=accent?1500:1000; g.gain.setValueAtTime(1e-4,when); g.gain.exponentialRampToValueAtTime(.5,when+.002); g.gain.exponentialRampToValueAtTime(1e-4,when+.05);
+  o.connect(g).connect(ctx.destination); o.start(when); o.stop(when+.06);
+}
+function metronome(){ // small widget for the warm-up
+  let bpm=S.bpm||60, timer=null, next=0, n=0;
+  const label=el("b",{class:"mono"},bpm+" bpm");
+  const set=v=>{bpm=Math.max(40,Math.min(160,v));S.bpm=bpm;save();label.textContent=bpm+" bpm"};
+  const btn=el("button",{class:"btn primary",onclick:()=>{
+    if(timer){clearInterval(timer);timer=null;btn.textContent="Start metronome";return}
+    const ctx=audioCtx(); next=ctx.currentTime+.1; n=0;
+    timer=setInterval(()=>{ if(!btn.isConnected){clearInterval(timer);return} while(next<ctx.currentTime+.2){click(next,n%4===0);next+=60/bpm;n++} },50);
+    btn.textContent="Stop";
+  }},"Start metronome");
+  return el("div",{class:"row"},btn,el("button",{class:"btn",onclick:()=>set(bpm-4)},"−"),label,el("button",{class:"btn",onclick:()=>set(bpm+4)},"+"));
+}
+// Count in with clicks, then go quiet and collect what's played.
+function listenTake({clickBpm,notes,noteBpm},show){
+  return new Promise(res=>{
+    const ctx=audioCtx(), beat=60/clickBpm, lead=.3, got=[];
+    for(let i=0;i<4;i++){ click(ctx.currentTime+lead+i*beat,i===0); setTimeout(()=>show(`${4-i}…`),(lead+i*beat)*1000); }
+    setTimeout(()=>show("Play now. The clicks stop; keep the beat yourself."),(lead+4*beat)*1000-150);
+    const cut=earNow()+lead+3.5*beat, gap=Math.max(2,3*60/noteBpm);
+    let quiet=null; const hard=setTimeout(finish,(lead+4*beat+notes*60/noteBpm+6)*1000);
+    const unsub=earListen(n=>{ if(n.t<cut) return; got.push(n); if(n.soft) return; show(`Heard ${got.length} of ${notes}…`);
+      clearTimeout(quiet); quiet=setTimeout(finish,gap*1000); });
+    function finish(){ unsub(); clearTimeout(quiet); clearTimeout(hard); res(got); }
+  });
+}
+const avg=a=>a.reduce((x,y)=>x+y,0)/a.length;
+const sdev=a=>{const m=avg(a);return Math.sqrt(avg(a.map(x=>(x-m)**2)))};
+function mergeTogether(ns,gap){ // two hands landing a few ms apart count as one note
+  const out=[]; let splits=0;
+  for(const n of ns){ const l=out[out.length-1];
+    if(l&&n.t-l.t<gap){ if(n.t-l.t>.06)splits++; if(l.midi==null)l.midi=n.midi; l.level=Math.max(l.level,n.level); }
+    else if(!n.soft) out.push({...n}); }
+  return {notes:out,splits};
+}
+function gradeTake(raw,o){ // o: {noteBpm, notes, seq?, tempoTol, unevenTol, driftTol?, evenDb?, merge?, maxSplits?}
+  let ns=raw.filter(n=>!n.soft), splits=0;
+  if(o.merge){ const m=mergeTogether(raw,o.merge); ns=m.notes; splits=m.splits; }
+  if(ns.length<Math.ceil(o.notes/2)) return {heard:false,ok:false,problems:[`Only heard ${ns.length} of ${o.notes} notes.`]};
+  const problems=[], beat=60/o.noteBpm, ioi=ns.slice(1).map((n,i)=>n.t-ns[i].t);
+  const tempo=60/avg(ioi), uneven=sdev(ioi)/beat;
+  if(Math.abs(tempo-o.noteBpm)/o.noteBpm>o.tempoTol) problems.push(`Your speed was ${Math.round(tempo)} notes a minute; the target is ${o.noteBpm}. ${tempo>o.noteBpm?"You rushed.":"You dragged."}`);
+  if(uneven>o.unevenTol) problems.push(`Notes were unevenly spaced (off by ${Math.round(sdev(ioi)*1000)} ms on average; aim for under ${Math.round(o.unevenTol*beat*1000)}).`);
+  if(o.driftTol&&ioi.length>=6){ const h=ioi.length>>1, a=avg(ioi.slice(0,h)), b=avg(ioi.slice(h)), drift=(a-b)/a;
+    if(Math.abs(drift)>o.driftTol) problems.push(drift>0?"You sped up as you went.":"You slowed down as you went."); }
+  if(o.maxSplits!=null&&splits>o.maxSplits) problems.push(`Your hands landed apart on ${splits} notes. Both hands should press each key together.`);
+  if(o.seq){
+    if(ns.length!==o.seq.length) problems.push(`Heard ${ns.length} notes; the pattern has ${o.seq.length}.`);
+    const wrong=[]; let unclear=0;
+    ns.slice(0,o.seq.length).forEach((n,i)=>{ if(n.midi==null)unclear++; else if(((n.midi-o.seq[i])%12+12)%12) wrong.push(`note ${i+1} was ${pcName(n.midi)}, should be ${pcName(o.seq[i])}`); });
+    if(wrong.length) problems.push("Wrong notes: "+wrong.join("; ")+".");
+    if(unclear>1) problems.push(`${unclear} notes were too unclear to identify. Play a little louder.`);
+  }
+  if(o.evenDb){ const lv=ns.map(n=>n.level), spread=sdev(lv);
+    if(spread>o.evenDb){ const q=lv.indexOf(Math.min(...lv)); problems.push(`Loudness wasn't even: note ${q+1} was ${Math.round(avg(lv)-lv[q])} dB quieter than average.`); } }
+  return {heard:true,ok:!problems.length,problems,tempo:Math.round(tempo),unevenMs:Math.round(sdev(ioi)*1000),splits,count:ns.length};
+}
+function earTakes(id,key){
+  if(id==="pulse") return [60,80,100].map(b=>({label:`${b} beats a minute`,clickBpm:b,noteBpm:b,notes:12,tempoTol:.06,unevenTol:.08,driftTol:.06}));
+  const pcs=semis=>noteNames(key,semis).map(n=>n.semi%12);
+  if(id==="five"){ const p=pcs([0,2,4,5,7]), seq=[0,1,2,3,4,3,2,1,0].map(i=>p[i]);
+    return ["Right hand","Left hand"].map(h=>({label:`${h}, ${key} five-finger pattern`,clickBpm:80,noteBpm:80,notes:9,seq,tempoTol:.08,unevenTol:.10,evenDb:3})); }
+  if(id==="scalesCGF"){ const p=pcs([0,2,4,5,7,9,11,12]), seq=[...p,...p.slice(0,7).reverse()];
+    return [{label:`${key} major scale, hands together, up and down`,clickBpm:80,noteBpm:160,notes:15,seq,tempoTol:.08,unevenTol:.12,merge:.18,maxSplits:2}]; }
+  return null;
+}
+function earTestRow(s,key,label){ // replaces the Clean/Missed buttons for tests the mic can grade
+  const takes=earTakes(s.id,key);
+  const wrap=el("div",{class:"panel",style:"gap:6px;padding-top:6px;border-top:1px solid var(--line)"});
+  const status=el("p",{class:"small muted",role:"status"}), out=el("div",{class:"panel",style:"gap:4px"});
+  const btn=el("button",{class:"btn primary",onclick:async()=>{
+    btn.disabled=true; status.textContent="Starting the mic…";
+    if(!await earOn()){ status.textContent="The app couldn't use your mic. Allow microphone access for this site and reload, or grade yourself below.";
+      wrap.append(resultRow("Grade yourself:",ok=>selfResult(s.id,ok))); return; }
+    out.replaceChildren(); const results=[];
+    for(const t of takes){
+      status.textContent=`${t.label}: get ready, counting in at ${t.clickBpm}.`;
+      await new Promise(r=>setTimeout(r,1200));
+      const g=gradeTake(await listenTake(t,m=>status.textContent=`${t.label}: ${m}`),t);
+      if(!g.heard){ status.textContent=`${g.problems[0]} Nothing was logged. Put the phone or laptop close to the piano and try again.`; btn.disabled=false; btn.textContent="Try again"; return; }
+      results.push(g);
+      out.append(el("p",{class:"small"},`${g.ok?"✓":"✗"} ${t.label}: ${g.tempo} a minute, spacing off by ${g.unevenMs} ms on average.`),...g.problems.map(p=>el("p",{class:"small muted"},p)));
+      if(!g.ok) break;
+    }
+    const ok=results.length===takes.length&&results.every(g=>g.ok);
+    selfResult(s.id,ok);
+    if(!ok){ const tags=[]; if(results.some(g=>g.problems.some(p=>/speed|spaced|sped|slowed/.test(p)))) tags.push("rhythm");
+      if(results.some(g=>g.problems.some(p=>/Wrong notes/.test(p)))) tags.push("fingering"); if(results.some(g=>g.splits>2)) tags.push("hands");
+      flagWeak(s.id); diagnose(tags); }
+    save(); status.textContent=ok?"Passed and logged.":"Logged as a miss. What went wrong is above, and tomorrow's plan works on it.";
+    btn.hidden=true;
+  }},"Start listening test");
+  wrap.append(el("p",{},label),el("div",{class:"row"},btn),status,out);
+  return wrap;
+}
+function recorder(){ // record a play-through and listen back before grading it
+  let mr=null, chunks=[];
+  const audio=el("audio",{controls:true,hidden:true,style:"width:100%"});
+  const btn=el("button",{class:"btn",onclick:async()=>{
+    if(mr){ mr.stop(); return; }
+    if(!await earOn()||!window.MediaRecorder){ btn.textContent="Recording isn't available here"; btn.disabled=true; return; }
+    chunks=[]; mr=new MediaRecorder(EAR.stream);
+    mr.ondataavailable=e=>chunks.push(e.data);
+    mr.onstop=()=>{ audio.src=URL.createObjectURL(new Blob(chunks,{type:mr.mimeType})); audio.hidden=false; mr=null; btn.textContent="Record again"; };
+    mr.start(); btn.textContent="Stop recording";
+  }},"Record your play-through");
+  return el("div",{class:"panel",style:"gap:6px"},el("p",{class:"small muted"},"Record it, then listen back before you grade it. You'll hear stops and uneven spots you missed while playing."),el("div",{class:"row"},btn),audio);
+}
+
 // ---------- drills ----------
 const LETTERS=["C","D","E","F","G","A","B"];
+const dToMidi=d=>12*(Math.floor(d/7)+1)+PC[LETTERS[d%7]];
 const POOLS={
   treble:{clef:"treble",notes:range(29,39)},
   bass:{clef:"bass",notes:range(17,27)},
@@ -473,7 +640,7 @@ const MAJ_ROOTS=["C","G","D","A","E","B","F♯","D♭","A♭","E♭","B♭","F"]
 let drillState=null;
 function renderDrillHome(){
   const root=$("#tab-drill"); root.replaceChildren();
-  root.append(el("p",{class:"muted"},"Each run lasts 60 seconds. Speed counts only correct answers. Pass a skill's target on two different days to master it. Keyboard works too: type the letter."));
+  root.append(el("p",{class:"muted"},"Each run lasts 60 seconds. Speed counts only correct answers. Pass a skill's target on two different days to master it. Keyboard works too: type the letter. The note-reading drills can also be answered on the piano itself: the mic listens for the exact key, and the target is half the tapping target. That's the harder, more useful version."));
   for(const s of SKILLS.filter(x=>x.kind==="drill")){
     const st=status(s.id), d=sk(s.id);
     root.append(el("div",{class:"block"},
@@ -485,33 +652,48 @@ function renderDrillHome(){
 function startDrill(kind,root=$("#tab-drill"),inline=false){
   abortDrill(); root.replaceChildren();
   const skillId={keys:"keys",fingers:"fingers",treble:"treble",bass:"bass",ledger:"ledger",keysig:"keysig",triads:"triads"}[kind];
-  drillState={kind,skillId,inline,correct:0,total:0,end:0,timer:null,current:null};
+  const canPlay=["treble","bass","ledger"].includes(kind), piano=canPlay&&!!S.pianoMode;
+  drillState={kind,skillId,inline,piano,correct:0,total:0,end:0,timer:null,current:null,unsub:null};
   const timer=el("div",{class:"timer"},"60");
   const score=el("div",{class:"small muted mono"},"0 correct · 0 tried");
   const stage=el("div",{class:"drill-stage"});
   const prompt=el("div",{style:"width:100%;display:flex;justify-content:center"});
   const answers=el("div",{class:"answers"+(kind==="keysig"||kind==="triads"||kind==="fingers"?" wide":"")});
   stage.append(prompt,answers);
-  const startBtn=el("button",{class:"btn primary",onclick:()=>{startBtn.hidden=true;go()}},"Start");
+  const startBtn=el("button",{class:"btn primary",onclick:async()=>{
+    startBtn.disabled=true;
+    if(piano&&!await earOn()){ prompt.innerHTML=`<p class="muted">The app couldn't use your mic. Allow microphone access and reload, or switch to tapping.</p>`; startBtn.disabled=false; return; }
+    startBtn.hidden=true; modeBtn.hidden=true; go(); }},"Start");
+  const modeBtn=canPlay?el("button",{class:"btn",onclick:()=>{S.pianoMode=!piano;save();startDrill(kind,root,inline)}},piano?"Switch to tapping letters":"Answer on the piano instead"):null;
   root.append(el("div",{class:"block"},
     el("div",{class:"block-head"},el("h3",{},SK[skillId].name),timer),score,stage,
-    el("div",{class:"row"},startBtn,inline?null:el("button",{class:"btn",onclick:()=>{stop(false);renderDrillHome()}},"Back"))));
-  prompt.innerHTML=`<p class="muted">Ready when you are.</p>`;
+    el("div",{class:"row"},startBtn,modeBtn,inline?null:el("button",{class:"btn",onclick:()=>{stop(false);renderDrillHome()}},"Back"))));
+  prompt.innerHTML=piano?`<p class="muted">Piano mode: play each note on the piano, the exact key, not just the letter. The mic listens. Target: ${pianoTarget(skillId)} a minute.</p>`:`<p class="muted">Ready when you are.</p>`;
 
   function next(){
     let q;
     if(kind==="keys"){const ws=[0,2,4,5,7,9,11];const o=Math.random()<.5?0:12;const i=Math.floor(Math.random()*7);q={svg:keyboardSVG([{semi:o+ws[i],label:"?"}]),ans:LETTERS[i],opts:LETTERS}}
     else if(kind==="fingers"){const F=["Thumb","Index","Middle","Ring","Pinky"];const n=Math.floor(Math.random()*5);const hand=Math.random()<.5?"left":"right";
       q=Math.random()<.5?{html:`<h2>Finger ${n+1}, ${hand} hand</h2>`,ans:F[n],opts:F}:{html:`<h2>${F[n]}, ${hand} hand</h2><p class="muted">Which number?</p>`,ans:String(n+1),opts:["1","2","3","4","5"]}}
-    else if(kind==="treble"||kind==="bass"){const d=pick(POOLS[kind].notes);q={svg:staffSVG(POOLS[kind].clef,[{d,x:180}]),ans:LETTERS[d%7],opts:LETTERS}}
-    else if(kind==="ledger"){const [c,d]=pick(POOLS.ledger.notes);q={svg:staffSVG(c,[{d,x:180}]),ans:LETTERS[d%7],opts:LETTERS}}
+    else if(kind==="treble"||kind==="bass"){const d=pick(POOLS[kind].notes);q={svg:staffSVG(POOLS[kind].clef,[{d,x:180}]),ans:LETTERS[d%7],opts:LETTERS,midi:dToMidi(d)}}
+    else if(kind==="ledger"){const [c,d]=pick(POOLS.ledger.notes);q={svg:staffSVG(c,[{d,x:180}]),ans:LETTERS[d%7],opts:LETTERS,midi:dToMidi(d)}}
     else if(kind==="keysig"){const [name,n,t]=pick(KEYSIGS);const pos=t==="#"?SHARP_POS:FLAT_POS;q={svg:staffSVG("treble",pos.slice(0,n).map((d,i)=>({d,glyph:t==="#"?"♯":"♭",x:80+i*16}))),ans:name,opts:KEYSIGS.map(k=>k[0])}}
     else {const minor=Math.random()<.5;const root=pick(minor?MIN_ROOTS:MAJ_ROOTS);const right=spell(root,minor);
       const wrong=new Set();while(wrong.size<3){const w=[...right];const i=1+Math.floor(Math.random()*2);const L=w[i][0];const a=ACC[w[i].slice(1)]+(Math.random()<.5?1:-1);if(Math.abs(a)>2)continue;w[i]=L+ACC_BY[a];wrong.add(w.join(" "))}
       const opts=shuffle([right.join(" "),...wrong]);q={html:`<h2>${root} ${minor?"minor":"major"}</h2>`,ans:right.join(" "),opts}}
     drillState.current=q;
     prompt.innerHTML=q.svg||q.html;
+    if(drillState.piano){ q.shownAt=earNow(); q.done=false; answers.replaceChildren(el("p",{class:"muted",style:"grid-column:1/-1;text-align:center"},"Play it.")); return; }
     answers.replaceChildren(...q.opts.map(o=>el("button",{onclick:e=>answer(o,e.target)},o)));
+  }
+  function heard(n){ // piano mode: a note came in through the mic
+    const q=drillState?.current; if(!drillState?.end||!q||q.done||n.soft||n.t<q.shownAt||n.midi==null) return;
+    q.done=true; drillState.total++;
+    const ok=n.midi===q.midi||(q.midi<48&&n.midi===q.midi+12); // low notes: mics often catch the octave above
+    if(ok) drillState.correct++;
+    answers.replaceChildren(el("p",{style:`grid-column:1/-1;text-align:center;font-weight:600;color:var(--${ok?"good":"bad"})`},ok?`✓ ${midiName(q.midi)}`:`✗ You played ${midiName(n.midi)}. It was ${midiName(q.midi)}.`));
+    score.textContent=`${drillState.correct} correct · ${drillState.total} tried`;
+    setTimeout(()=>{ if(drillState?.end) next(); }, ok?250:1600);
   }
   function answer(o,btn){
     if(!drillState||!drillState.end)return;
@@ -524,15 +706,15 @@ function startDrill(kind,root=$("#tab-drill"),inline=false){
   drillState.keyHandler=e=>{ if(!drillState?.end)return; const k=e.key.toUpperCase(); if(LETTERS.includes(k)&&drillState.current.opts===LETTERS){const b=[...answers.children].find(b=>b.textContent===k);if(b)answer(k,b)} };
   document.addEventListener("keydown",drillState.keyHandler);
   function go(){
-    drillState.end=Date.now()+60000; next();
+    drillState.end=Date.now()+60000; if(drillState.piano) drillState.unsub=earListen(heard); next();
     drillState.timer=setInterval(()=>{const left=Math.max(0,Math.ceil((drillState.end-Date.now())/1000));timer.textContent=left;if(left<=0)stop(true)},200);
   }
   function stop(finished){
-    if(!drillState)return; clearInterval(drillState.timer); document.removeEventListener("keydown",drillState.keyHandler);
+    if(!drillState)return; clearInterval(drillState.timer); document.removeEventListener("keydown",drillState.keyHandler); drillState.unsub?.();
     const st=drillState; drillState=null; if(!finished)return;
     const npm=st.correct, acc=st.total?Math.round(100*st.correct/st.total):0;
-    const s=sk(skillId), target=SK[skillId].target, pass=npm>=target&&acc>=95;
-    const run={date:TODAY,at:new Date().toISOString(),drill:kind,npm,acc,pass};
+    const s=sk(skillId), target=st.piano?pianoTarget(skillId):SK[skillId].target, pass=npm>=target&&acc>=95;
+    const run={date:TODAY,at:new Date().toISOString(),drill:kind,npm,acc,pass,...(st.piano?{mode:"piano"}:{})};
     runs.unshift(run); todayLog.drillRuns.push(run); addRow("runs",run);
     if(!s.best||npm*acc>s.best.npm*s.best.acc) s.best={npm,acc,date:TODAY};
     let verdict;
@@ -546,6 +728,7 @@ function startDrill(kind,root=$("#tab-drill"),inline=false){
       el("p",{},verdict),el("div",{class:"row",style:"justify-content:center"},el("button",{class:"btn primary",onclick:()=>startDrill(kind,root,inline)},"Run again"))));
   }
 }
+const pianoTarget=id=>Math.ceil(SK[id].target/2); // finding the key takes longer than tapping a letter
 const pick=a=>a[Math.floor(Math.random()*a.length)];
 const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
 
@@ -556,7 +739,7 @@ function buildSteps(p,phase0Done){
   const steps=[];
   const lesson={id:"lesson",title:`Video lesson ${S.lesson||1}`,mins:8,render:c=>lessonBody(c)};
   if(!phase0Done) steps.push(lesson);
-  steps.push({id:"warmup",title:"Warm-up",mins:3,render:c=>c.append(...warmup(p,phase0Done))});
+  steps.push({id:"warmup",title:"Warm-up",mins:3,render:c=>c.append(...warmup(p,phase0Done),metronome())});
   steps.push({id:"drill",title:SK[p.drill].name,mins:5,render:c=>{
     c.append(el("p",{class:"small muted"},SK[p.drill].gate));
     const box=el("div"); c.append(box); startDrill(SK[p.drill].drill,box,true);
@@ -568,18 +751,18 @@ function buildSteps(p,phase0Done){
     const items=[...p.duePieces.map(pc=>({type:"piece",pc})),...p.dueSelf.map(s=>({type:"skill",s}))];
     if(items.length) steps.push({id:"review",title:"Spaced review",mins:4,render:c=>{
       c.append(el("p",{},"Play each of these once, cold, with no warm-up on it. That first try is the honest test."));
-      for(const it of items) c.append(it.type==="piece"?resultRow(it.pc.name,ok=>pieceResult(it.pc.id,ok,true)):resultRow(`${it.s.name}: ${it.s.gate}`,ok=>selfResult(it.s.id,ok)));
+      for(const it of items) c.append(it.type==="piece"?el("div",{class:"panel",style:"gap:6px"},recorder(),resultRow(it.pc.name,ok=>pieceResult(it.pc.id,ok,true))):gateRow(it.s,p,`${it.s.name}: ${it.s.gate}`));
     }});
     if(p.newPiece) steps.push({id:"piece",title:p.newPiece.name,mins:8,render:c=>{
       c.append(el("p",{},"Find the 2–4 hardest bars. Play just those, slowly enough to get them right, until they're easy. Then play the whole piece once."),
         el("p",{class:"small muted"},`Clean first tries so far: ${p.newPiece.cleanDays.length} of 3 days.`),
-        resultRow("How did your first full play-through go?",ok=>pieceResult(p.newPiece.id,ok,false)));
+        recorder(),resultRow("How did your first full play-through go?",ok=>pieceResult(p.newPiece.id,ok,false)));
     }});
     steps.push(lesson);
   }
   if(p.gates.length) steps.push({id:"gates",title:"Pass test",mins:2,render:c=>{
     c.append(el("p",{},"Try each once, cold. Three passing days on different days unlocks what comes next."));
-    for(const s of p.gates) c.append(resultRow(`${s.name} (${sk(s.id).passDays.length}/3): ${s.gate}`,ok=>selfResult(s.id,ok)));
+    for(const s of p.gates) c.append(gateRow(s,p,`${s.name} (${sk(s.id).passDays.length}/3): ${s.gate}`));
   }});
   steps.push({id:"wrap",title:"Wrap up",mins:1,render:c=>{
     if(run.logged){c.append(el("p",{},"Session logged. Same time tomorrow."));return}
@@ -594,6 +777,10 @@ function buildSteps(p,phase0Done){
   }});
   return steps;
 }
+function gateRow(s,p,label){
+  if(!earTakes(s.id,"C")) return resultRow(label,ok=>selfResult(s.id,ok));
+  return earTestRow(s,s.id==="scalesCGF"&&!["C","G","F"].includes(p.key)?"C":p.key,label);
+}
 function lessonBody(c){
   const n=S.lesson||1;
   const frame=el("div",{class:"video"});
@@ -603,7 +790,7 @@ function lessonBody(c){
       el("button",{class:"btn",onclick:()=>{S.lesson=n+1;save();renderToday()}},`I can play lesson ${n}'s examples`),
       el("span",{class:"small muted"},`Tap when you can. Then lesson ${n+1} is up next.`)));
 }
-function abortDrill(){ if(!drillState)return; clearInterval(drillState.timer); document.removeEventListener("keydown",drillState.keyHandler); drillState=null; }
+function abortDrill(){ if(!drillState)return; clearInterval(drillState.timer); document.removeEventListener("keydown",drillState.keyHandler); drillState.unsub?.(); drillState=null; }
 function renderToday(){
   abortDrill();
   const root=$("#tab-today"); root.replaceChildren(); clearInterval(stepTick);
