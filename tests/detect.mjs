@@ -8,7 +8,7 @@ await page.goto(base + "/index.html");
 
 const feed = (name) => page.evaluate(async (name) => {
   const buf = new Float32Array(await (await fetch("audio/" + name + ".f32")).arrayBuffer());
-  Object.assign(EAR, { sr: 48000, pos: 0, floor: 1e-3, hist: [], lastOnset: -1e9, pending: [] });
+  Object.assign(EAR, { sr: 48000, pos: 0, floor: 1e-3, hist: [], lastOnset: -1e9, lastNote: null, pending: [] });
   EAR.ring.fill(0);
   const got = []; const un = earListen(n => got.push(n));
   for (let i = 0; i + 512 <= buf.length; i += 512) earBlock(buf.subarray(i, i + 512));
