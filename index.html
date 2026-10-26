@@ -105,6 +105,27 @@ textarea{min-height:70px;resize:vertical}
 .step-nav .next{margin-left:auto;padding:10px 16px}
 .clock.over{color:var(--warn)}
 .review-out{white-space:pre-wrap;font-size:14.5px}
+/* lesson exercises */
+.exrow{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--line)}
+.eyebrow+.exrow,.exrow:first-child{border-top:0}
+.exletter{font:600 72px/1 var(--f-display);min-height:72px}
+.dots{display:flex;gap:8px}
+.dots .dot{display:inline-grid;place-items:center;width:46px;height:46px;border-radius:50%;border:2px dashed var(--line);font:600 12px var(--f-mono);color:var(--muted)}
+.dots .dot.on{border:2px solid var(--good);background:var(--good-soft);color:var(--good)}
+.exdone{border-radius:10px;padding:12px 14px}
+.exdone.good{background:var(--good-soft)} .exdone.bad{background:var(--warn-soft)}
+.small.good{color:var(--good)} .small.bad{color:var(--bad)} .small.warn{color:var(--warn)}
+.linewrap{display:flex;justify-content:center}
+.staff.line{max-width:none}
+.staff .hollow{fill:var(--surface);stroke:var(--ink)}
+.staff .fing{fill:var(--muted)}
+.staff .ev.cur .fill{fill:var(--accent)} .staff .ev.cur .hollow,.staff .ev.cur line,.staff .ev.cur path{stroke:var(--accent)}
+.staff .ev.ok .fill,.staff .ev.ok .marknote{fill:var(--good)} .staff .ev.ok .hollow,.staff .ev.ok line,.staff .ev.ok path{stroke:var(--good)}
+.staff .ev.warn .fill,.staff .ev.warn .marknote{fill:var(--warn)} .staff .ev.warn .hollow,.staff .ev.warn line,.staff .ev.warn path{stroke:var(--warn)}
+.staff .ev.bad .fill,.staff .ev.bad .marknote{fill:var(--bad)} .staff .ev.bad .hollow,.staff .ev.bad line,.staff .ev.bad path{stroke:var(--bad)}
+.bars{width:100%;max-width:420px;height:auto;display:block} .bars rect{fill:var(--accent)} .bars text{fill:var(--muted);font:600 11px var(--f-mono)}
+button.btn.quizopt{text-align:left} button.btn.quizopt.good{background:var(--good-soft);border-color:var(--good)} button.btn.quizopt.bad{background:var(--bad-soft);border-color:var(--bad)}
+details.later summary{cursor:pointer;color:var(--muted);padding:6px 0}
 @media (prefers-reduced-motion:no-preference){.answers button{transition:background .12s}}
 </style>
 </head>
@@ -134,6 +155,7 @@ textarea{min-height:70px;resize:vertical}
   <section class="panel" id="tab-log" hidden></section>
 </div>
 
+<script src="lessons.js"></script>
 <script>
 // ---------- skill graph ----------
 const SKILLS = [
@@ -185,7 +207,7 @@ document.getElementById("today").textContent = new Date().toLocaleDateString(und
 
 let S = {skills:{}, pieces:[], weak:{}, lastKey:null};
 let sessions=[], runs=[];
-let todayLog = {drillRuns:[], pieceResults:[], gateResults:[]};
+let todayLog = {drillRuns:[], pieceResults:[], gateResults:[], exercises:[]};
 
 function sk(id){ return S.skills[id] || (S.skills[id]={status:"new", passDays:[], best:null, interval:0, due:null}); }
 function unlocked(id){ return SK[id].pre.every(p=>sk(p).status==="mastered"); }
@@ -282,17 +304,6 @@ function warmup(p,phase0Done){
 }
 
 const PLAYLIST="PLpOuhygfD7QnP46wUgQudOySX_z2UOhXs";
-function lessonBlock(mins){
-  const n=S.lesson||1;
-  const frame=el("div",{class:"video"});
-  frame.innerHTML=`<iframe src="https://www.youtube-nocookie.com/embed/videoseries?list=${PLAYLIST}&index=${n}" title="Bill Hilton, How To Play Piano For Beginners, lesson ${n}" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen loading="lazy"></iframe>`;
-  return block(`Video lesson ${n}`,mins,
-    el("p",{},"Bill Hilton's free beginner course. Watch with the piano in front of you, pause, and copy everything he plays. Stay on a lesson until you can play its examples."),
-    frame,
-    el("div",{class:"row"},
-      el("button",{class:"btn",disabled:n<=1,onclick:()=>{S.lesson=Math.max(1,n-1);save();renderToday()}},"Previous"),
-      el("button",{class:"btn primary",onclick:()=>{S.lesson=n+1;save();renderToday()}},`I can play lesson ${n}'s examples`)));
-}
 function blockHead(title,mins){return el("div",{class:"block-head"},el("h3",{},title),mins?el("span",{class:"mins"},mins+" min"):null)}
 function block(title,mins,...kids){return el("div",{class:"block"},blockHead(title,mins),...kids)}
 
@@ -432,7 +443,7 @@ async function weeklyReview(btn,out){
 const NOTE_NAMES=["C","C♯","D","E♭","E","F","F♯","G","A♭","A","B♭","B"];
 const midiName=m=>NOTE_NAMES[((m%12)+12)%12]+(Math.floor(m/12)-1);
 const pcName=m=>NOTE_NAMES[((m%12)+12)%12];
-const EAR={ctx:null,stream:null,node:null,sr:48000,ring:new Float32Array(1<<17),pos:0,floor:1e-3,hist:[],lastOnset:-1e9,pending:[],subs:new Set()};
+const EAR={ctx:null,stream:null,node:null,sr:48000,ring:new Float32Array(1<<17),pos:0,floor:1e-3,hist:[],lastOnset:-1e9,lastNote:null,pending:[],subs:new Set()};
 function audioCtx(){ if(!EAR.ctx) EAR.ctx=new (window.AudioContext||window.webkitAudioContext)(); if(EAR.ctx.state==="suspended") EAR.ctx.resume(); return EAR.ctx; }
 async function earOn(){
   if(EAR.node) return true;
@@ -465,8 +476,11 @@ function earBlock(x){ // called for every 512-sample block of mic input
     EAR.pending.push({t:start/sr,at:start+Math.round(.03*sr),n:sr>60000?4096:2048,peak:rms,before});
   }
   while(EAR.pending.length && EAR.pos>=EAR.pending[0].at+EAR.pending[0].n){
-    const p=EAR.pending.shift(), y=yin(earSlice(p.at,p.n),sr);
-    const note={t:p.t,midi:y?Math.round(69+12*Math.log2(y.f/440)):null,freq:y?y.f:null,level:20*Math.log10(p.peak),soft:p.peak<1.8*p.before};
+    const p=EAR.pending.shift(), y=yin(earSlice(p.at,p.n),sr), last=EAR.lastNote;
+    // a slow attack can trip a second rise ~90ms in; one that isn't clearly louder than the note it follows is the same note
+    const echo=last&&p.t-last.t<.15&&p.peak<1.25*last.peak;
+    const note={t:p.t,midi:y?Math.round(69+12*Math.log2(y.f/440)):null,freq:y?y.f:null,level:20*Math.log10(p.peak),soft:echo||p.peak<1.5*p.before};
+    if(!echo) EAR.lastNote={t:p.t,peak:p.peak};
     for(const fn of [...EAR.subs]) fn(note);
   }
 }
@@ -477,6 +491,8 @@ function yin(x,sr){ // fundamental frequency of a window, or null if unclear
   let tau=-1;
   for(let t=minT;t<=maxT;t++) if(c[t]<.15){ while(t<maxT&&c[t+1]<c[t])t++; tau=t; break; }
   if(tau<0){ let m=1; for(let t=minT;t<=maxT;t++) if(c[t]<m){m=c[t];tau=t} if(m>.35) return null; }
+  // two notes ringing together share a long common period; prefer the shortest period that's nearly as good
+  for(let t=minT,lim=c[tau]+.1;t<tau;t++) if(c[t]<lim&&c[t]<=c[t-1]&&c[t]<=c[t+1]){ tau=t; break; }
   const a=c[tau-1]||c[tau], b=c[tau], d=c[tau+1]||c[tau], den=a+d-2*b;
   return {f:sr/(tau+(den?.5*(a-d)/den:0)), clarity:1-b};
 }
@@ -640,6 +656,7 @@ const MAJ_ROOTS=["C","G","D","A","E","B","F♯","D♭","A♭","E♭","B♭","F"]
 let drillState=null;
 function renderDrillHome(){
   const root=$("#tab-drill"); root.replaceChildren();
+  root.append(lessonDrills(),el("h2",{},"Timed drills"));
   root.append(el("p",{class:"muted"},"Each run lasts 60 seconds. Speed counts only correct answers. Pass a skill's target on two different days to master it. Keyboard works too: type the letter. The note-reading drills can also be answered on the piano itself: the mic listens for the exact key, and the target is half the tapping target. That's the harder, more useful version."));
   for(const s of SKILLS.filter(x=>x.kind==="drill")){
     const st=status(s.id), d=sk(s.id);
@@ -737,7 +754,7 @@ let runKey="pr-run-"+TODAY, run=load(runKey,{i:0,done:[],logged:false}), stepTic
 function saveRun(){store(runKey,run)}
 function buildSteps(p,phase0Done){
   const steps=[];
-  const lesson={id:"lesson",title:`Video lesson ${S.lesson||1}`,mins:8,render:c=>lessonBody(c)};
+  const lesson={id:"lesson",title:`Video: ${lessonLabel(S.lesson||1)}`,mins:8,render:c=>lessonBody(c)};
   if(!phase0Done) steps.push(lesson);
   steps.push({id:"warmup",title:"Warm-up",mins:3,render:c=>c.append(...warmup(p,phase0Done),metronome())});
   steps.push({id:"drill",title:SK[p.drill].name,mins:5,render:c=>{
@@ -771,7 +788,7 @@ function buildSteps(p,phase0Done){
       S.lastKey=p.key;
       const row={date:TODAY,at:new Date().toISOString(),notes:notes.value.trim(),warmupKey:p.key,stepsDone:run.done.length,...todayLog};
       sessions.unshift(row); await addRow("sessions",row); await save();
-      todayLog={drillRuns:[],pieceResults:[],gateResults:[]};
+      todayLog={drillRuns:[],pieceResults:[],gateResults:[],exercises:[]};
       run.logged=true; if(!run.done.includes("wrap"))run.done.push("wrap"); saveRun(); renderLog(); renderToday();
     }},"Log today's session")));
   }});
@@ -781,16 +798,7 @@ function gateRow(s,p,label){
   if(!earTakes(s.id,"C")) return resultRow(label,ok=>selfResult(s.id,ok));
   return earTestRow(s,s.id==="scalesCGF"&&!["C","G","F"].includes(p.key)?"C":p.key,label);
 }
-function lessonBody(c){
-  const n=S.lesson||1;
-  const frame=el("div",{class:"video"});
-  frame.innerHTML=`<iframe src="https://www.youtube-nocookie.com/embed/videoseries?list=${PLAYLIST}&index=${n}" title="Bill Hilton beginner lesson ${n}" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>`;
-  c.append(el("p",{},"Watch with the piano in front of you. Pause and copy everything he plays."),frame,
-    el("div",{class:"row"},
-      el("button",{class:"btn",onclick:()=>{S.lesson=n+1;save();renderToday()}},`I can play lesson ${n}'s examples`),
-      el("span",{class:"small muted"},`Tap when you can. Then lesson ${n+1} is up next.`)));
-}
-function abortDrill(){ if(!drillState)return; clearInterval(drillState.timer); document.removeEventListener("keydown",drillState.keyHandler); drillState.unsub?.(); drillState=null; }
+function abortDrill(){ abortExercise(); if(!drillState)return; clearInterval(drillState.timer); document.removeEventListener("keydown",drillState.keyHandler); drillState.unsub?.(); drillState=null; }
 function renderToday(){
   abortDrill();
   const root=$("#tab-today"); root.replaceChildren(); clearInterval(stepTick);
